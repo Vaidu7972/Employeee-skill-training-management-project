@@ -1,0 +1,998 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum SystemRole {
+  SUPER_ADMIN
+  ADMIN_SUPPORT
+  MANAGER
+  EMPLOYEE
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum LoginStatus {
+  SUCCESS
+  FAILED
+}
+
+enum SkillType {
+  TECHNICAL
+  FUNCTIONAL
+  BEHAVIORAL
+  LEADERSHIP
+  DOMAIN
+}
+
+enum SkillRatingStatus {
+  ASSIGNED
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  NEEDS_CHANGES
+}
+
+enum RatingSource {
+  SELF
+  MANAGER
+  SYSTEM
+}
+
+enum ManagerCapacityStatus {
+  AVAILABLE
+  NEARLY_FULL
+  FULL
+  OVER_CAPACITY
+}
+
+enum TrainingPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TrainingStatus {
+  ASSIGNED
+  NOT_STARTED
+  IN_PROGRESS
+  ON_HOLD
+  SUBMITTED_FOR_REVIEW
+  COMPLETED
+  VERIFIED
+  OVERDUE
+  CANCELLED
+}
+
+enum CertificateStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum TicketCategory {
+  TRAINING
+  SKILL
+  ASSESSMENT
+  CERTIFICATE
+  MANAGER
+  PROFILE
+  LOGIN
+  TECHNICAL
+  ACCESS
+  DEADLINE
+  OTHER
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TicketStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  WAITING_USER
+  WAITING_MANAGER
+  ESCALATED
+  RESOLVED
+  CLOSED
+  REOPENED
+}
+
+enum SlaStatus {
+  WITHIN_SLA
+  NEAR_BREACH
+  BREACHED
+  COMPLETED_WITHIN_SLA
+  COMPLETED_AFTER_SLA
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+  CANCELLED
+}
+
+enum ProjectPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ProjectAssignmentStatus {
+  ACTIVE
+  COMPLETED
+  REMOVED
+}
+
+enum LanguageProficiency {
+  BASIC
+  CONVERSATIONAL
+  FLUENT
+  NATIVE
+}
+
+// ----------------------------------------------------
+// 1. Authentication & Users
+// ----------------------------------------------------
+
+model User {
+  id                String         @id @default(uuid()) @db.Uuid
+  email             String         @unique
+  passwordHash      String
+  role              SystemRole
+  status            AccountStatus  @default(ACTIVE)
+  failedLoginCount  Int            @default(0)
+  lockedUntil       DateTime?      @db.Timestamptz
+  createdAt         DateTime       @default(now()) @db.Timestamptz
+  updatedAt         DateTime       @updatedAt @db.Timestamptz
+
+  refreshTokens     RefreshToken[]
+  loginHistories    LoginHistory[]
+  employee          Employee?
+  notifications     Notification[]
+  preferences       NotificationPreference?
+  savedFilters      SavedFilter[]
+  auditLogs         AuditLog[]
+  errorLogs         ErrorLog[]
+  resumeDownloads   ResumeDownload[] @relation("UserDownloads")
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  token     String   @unique
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  family    String   @db.Uuid
+  isRevoked Boolean  @default(false)
+  expiresAt DateTime @db.Timestamptz
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([userId])
+  @@index([family])
+  @@map("refresh_tokens")
+}
+
+model LoginHistory {
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String      @db.Uuid
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress String?
+  userAgent String?
+  status    LoginStatus
+  createdAt DateTime    @default(now()) @db.Timestamptz
+
+  @@index([userId])
+  @@map("login_history")
+}
+
+// ----------------------------------------------------
+// 2. Organization Structure
+// ----------------------------------------------------
+
+model Department {
+  id               String        @id @default(uuid()) @db.Uuid
+  code             String        @unique
+  name             String
+  description      String?
+  departmentHeadId String?       @db.Uuid
+  status           AccountStatus @default(ACTIVE)
+  createdAt        DateTime      @default(now()) @db.Timestamptz
+  updatedAt        DateTime      @updatedAt @db.Timestamptz
+
+  designations    Designation[]
+  employees       Employee[]
+  skillRequirements DepartmentSkillRequirement[]
+
+  @@map("departments")
+}
+
+model Designation {
+  id           String        @id @default(uuid()) @db.Uuid
+  code         String        @unique
+  name         String
+  departmentId String        @db.Uuid
+  department   Department    @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  level        Int           @default(1)
+  description  String?
+  status       AccountStatus @default(ACTIVE)
+  createdAt    DateTime      @default(now()) @db.Timestamptz
+  updatedAt    DateTime      @updatedAt @db.Timestamptz
+
+  employees         Employee[]
+  skillRequirements RoleSkillRequirement[]
+  careerPathsFrom   CareerPath[]           @relation("FromDesignation")
+  careerPathsTo     CareerPath[]           @relation("ToDesignation")
+
+  @@index([departmentId])
+  @@map("designations")
+}
+
+model Employee {
+  id                String        @id @default(uuid()) @db.Uuid
+  employeeCode      String        @unique
+  firstName         String
+  lastName          String
+  email             String        @unique
+  phone             String?
+  departmentId      String        @db.Uuid
+  department        Department    @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  designationId     String        @db.Uuid
+  designation       Designation   @relation(fields: [designationId], references: [id], onDelete: Cascade)
+  managerId         String?       @db.Uuid
+  manager           Employee?     @relation("ManagerToSubordinates", fields: [managerId], references: [id], onDelete: SetNull)
+  subordinates      Employee[]    @relation("ManagerToSubordinates")
+  dateOfJoining     DateTime      @db.Date
+  yearsOfExperience Decimal       @db.Decimal(4, 1)
+  employmentType    String        @default("FULL_TIME") // e.g. FULL_TIME, CONTRACT, INTERN
+  workLocation      String?
+  workMode          String        @default("HYBRID") // REMOTE, ONSITE, HYBRID
+  profileImage      String?
+  profileCompletion Int           @default(0)
+  accountStatus     AccountStatus @default(ACTIVE)
+  userId            String?       @unique @db.Uuid
+  user              User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  careerObjective   String?
+  resumeFeedback    String?
+  resumeTemplate    String        @default("minimalist")
+  resumeHideContact Boolean       @default(false)
+  resumeHideRatings Boolean       @default(false)
+  managerCapacity   Int?
+  createdAt         DateTime      @default(now()) @db.Timestamptz
+  updatedAt         DateTime      @updatedAt @db.Timestamptz
+
+  managerAssignments        ManagerAssignment[]        @relation("EmployeeAssignments")
+  managedAssignments        ManagerAssignment[]        @relation("ManagerAssignments")
+  managerAssignmentHistory  ManagerAssignmentHistory[] @relation("EmployeeAssignmentHistories")
+  managedAssignmentHistory  ManagerAssignmentHistory[] @relation("ManagerAssignmentHistories")
+  employeeSkills            EmployeeSkill[]
+  trainingPlans             TrainingPlan[]             @relation("EmployeeTrainings")
+  assignedTrainings         TrainingPlan[]             @relation("AssignedByTrainings")
+  certificates              Certificate[]
+  learningPaths             EmployeeLearningPath[]
+  achievements              EmployeeAchievement[]
+  ticketsCreated            SupportTicket[]            @relation("TicketCreator")
+  assessmentSubmissions     SkillAssessmentSubmission[]
+  projectsManaged           Project[]                  @relation("ProjectManager")
+  projectAssignments        ProjectAssignment[]
+  languages                 EmployeeLanguage[]
+  resumeDownloads           ResumeDownload[]           @relation("EmployeeDownloads")
+
+  @@index([departmentId])
+  @@index([designationId])
+  @@index([managerId])
+  @@map("employees")
+}
+
+model ManagerAssignment {
+  id           String    @id @default(uuid()) @db.Uuid
+  employeeId   String    @db.Uuid
+  employee     Employee  @relation("EmployeeAssignments", fields: [employeeId], references: [id], onDelete: Cascade)
+  managerId    String    @db.Uuid
+  manager      Employee  @relation("ManagerAssignments", fields: [managerId], references: [id], onDelete: Cascade)
+  assignedById String    @db.Uuid
+  assignedAt   DateTime  @default(now()) @db.Timestamptz
+  status       String    @default("ACTIVE") // ACTIVE, INACTIVE
+  reason       String?
+
+  @@index([employeeId])
+  @@index([managerId])
+  @@map("manager_assignments")
+}
+
+model ManagerAssignmentHistory {
+  id           String   @id @default(uuid()) @db.Uuid
+  employeeId   String   @db.Uuid
+  employee     Employee @relation("EmployeeAssignmentHistories", fields: [employeeId], references: [id], onDelete: Cascade)
+  managerId    String   @db.Uuid
+  manager      Employee @relation("ManagerAssignmentHistories", fields: [managerId], references: [id], onDelete: Cascade)
+  assignedById String   @db.Uuid
+  assignedAt   DateTime @db.Timestamptz
+  removedAt    DateTime @default(now()) @db.Timestamptz
+  reason       String?
+
+  @@index([employeeId])
+  @@index([managerId])
+  @@map("manager_assignment_history")
+}
+
+// ----------------------------------------------------
+// 3. Skills Matrix
+// ----------------------------------------------------
+
+model SkillCategory {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  description String?
+  skills      Skill[]
+
+  @@map("skill_categories")
+}
+
+model Skill {
+  id                   String        @id @default(uuid()) @db.Uuid
+  skillCode            String        @unique
+  skillName            String        @unique
+  categoryId           String        @db.Uuid
+  category             SkillCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  skillType            SkillType
+  description          String?
+  defaultRequiredLevel Int           @default(3) // 1-5 Scale
+  demandScore          Int           @default(50) // 1-100 Score
+  status               AccountStatus @default(ACTIVE)
+  createdAt            DateTime      @default(now()) @db.Timestamptz
+  updatedAt            DateTime      @updatedAt @db.Timestamptz
+
+  dependencies         SkillDependency[]           @relation("MainSkill")
+  dependents           SkillDependency[]           @relation("DependentSkill")
+  deptRequirements     DepartmentSkillRequirement[]
+  roleRequirements     RoleSkillRequirement[]
+  employeeSkills       EmployeeSkill[]
+  trainingPlans        TrainingPlan[]
+  learningPathItems    LearningPathItem[]
+  careerPathSkills     CareerPathSkill[]
+  assessments          SkillAssessment[]
+  projectRequirements  ProjectSkillRequirement[]
+
+  @@index([categoryId])
+  @@map("skills")
+}
+
+model SkillDependency {
+  id               String @id @default(uuid()) @db.Uuid
+  skillId          String @db.Uuid
+  skill            Skill  @relation("MainSkill", fields: [skillId], references: [id], onDelete: Cascade)
+  dependentSkillId String @db.Uuid
+  dependentSkill   Skill  @relation("DependentSkill", fields: [dependentSkillId], references: [id], onDelete: Cascade)
+  dependencyType   String @default("PREREQUISITE") // e.g. PREREQUISITE, RECOMMENDED
+
+  @@unique([skillId, dependentSkillId])
+  @@map("skill_dependencies")
+}
+
+model DepartmentSkillRequirement {
+  id            String     @id @default(uuid()) @db.Uuid
+  departmentId  String     @db.Uuid
+  department    Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  skillId       String     @db.Uuid
+  skill         Skill      @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  requiredLevel Int        @default(3)
+  status        String     @default("ACTIVE")
+
+  @@unique([departmentId, skillId])
+  @@map("department_skill_requirements")
+}
+
+model RoleSkillRequirement {
+  id            String      @id @default(uuid()) @db.Uuid
+  designationId String      @db.Uuid
+  designation   Designation @relation(fields: [designationId], references: [id], onDelete: Cascade)
+  skillId       String      @db.Uuid
+  skill         Skill       @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  requiredLevel Int         @default(3)
+  status        String      @default("ACTIVE")
+
+  @@unique([designationId, skillId])
+  @@map("role_skill_requirements")
+}
+
+model EmployeeSkill {
+  id               String            @id @default(uuid()) @db.Uuid
+  employeeId       String            @db.Uuid
+  employee         Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  skillId          String            @db.Uuid
+  skill            Skill             @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  selfRating       Int               @default(1)
+  finalRating      Int               @default(1)
+  status           SkillRatingStatus @default(ASSIGNED)
+  experienceMonths Int               @default(0)
+  employeeComments String?
+  managerFeedback  String?
+  approvedById     String?           @db.Uuid
+  approvedAt       DateTime?         @db.Timestamptz
+  createdAt        DateTime          @default(now()) @db.Timestamptz
+  updatedAt        DateTime          @updatedAt @db.Timestamptz
+
+  ratingHistories  SkillRatingHistory[]
+
+  @@unique([employeeId, skillId])
+  @@index([employeeId])
+  @@index([skillId])
+  @@map("employee_skills")
+}
+
+model SkillRatingHistory {
+  id              String        @id @default(uuid()) @db.Uuid
+  employeeSkillId String        @db.Uuid
+  employeeSkill   EmployeeSkill @relation(fields: [employeeSkillId], references: [id], onDelete: Cascade)
+  rating          Int
+  source          RatingSource  @default(SELF)
+  updatedById     String        @db.Uuid // User ID who updated it
+  comments        String?
+  createdAt       DateTime      @default(now()) @db.Timestamptz
+
+  @@index([employeeSkillId])
+  @@map("skill_rating_history")
+}
+
+// ----------------------------------------------------
+// 4. Training Management
+// ----------------------------------------------------
+
+model TrainingProvider {
+  id            String        @id @default(uuid()) @db.Uuid
+  name          String        @unique
+  contactPerson String?
+  email         String?
+  phone         String?
+  status        AccountStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now()) @db.Timestamptz
+  updatedAt     DateTime      @updatedAt @db.Timestamptz
+
+  trainingPlans TrainingPlan[]
+
+  @@map("training_providers")
+}
+
+model TrainingPlan {
+  id                  String           @id @default(uuid()) @db.Uuid
+  trainingCode        String           @unique
+  trainingTitle       String
+  description         String?
+  employeeId          String           @db.Uuid
+  employee            Employee         @relation("EmployeeTrainings", fields: [employeeId], references: [id], onDelete: Cascade)
+  skillId             String           @db.Uuid
+  skill               Skill            @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  assignedById        String           @db.Uuid
+  assignedBy          Employee         @relation("AssignedByTrainings", fields: [assignedById], references: [id], onDelete: Cascade)
+  providerId          String?          @db.Uuid
+  provider            TrainingProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  trainingType        String           @default("ONLINE") // ONLINE, CLASSROOM, WORKSHOP
+  startDate           DateTime         @db.Date
+  dueDate             DateTime         @db.Date
+  progress            Int              @default(0) // 0 - 100
+  priority            TrainingPriority @default(MEDIUM)
+  estimatedHours      Decimal          @db.Decimal(5, 1)
+  actualHours         Decimal?         @db.Decimal(5, 1)
+  trainingUrl         String?
+  certificateRequired Boolean          @default(false)
+  employeeComments    String?
+  managerFeedback     String?
+  completionDate      DateTime?        @db.Date
+  status              TrainingStatus   @default(ASSIGNED)
+  cancellationReason  String?
+  createdAt           DateTime         @default(now()) @db.Timestamptz
+  updatedAt           DateTime         @updatedAt @db.Timestamptz
+
+  progressHistories   TrainingProgressHistory[]
+  comments            TrainingComment[]
+  certificates        Certificate[]
+
+  @@index([employeeId])
+  @@index([skillId])
+  @@map("training_plans")
+}
+
+model TrainingProgressHistory {
+  id             String       @id @default(uuid()) @db.Uuid
+  trainingPlanId String       @db.Uuid
+  trainingPlan   TrainingPlan @relation(fields: [trainingPlanId], references: [id], onDelete: Cascade)
+  progress       Int
+  comments       String?
+  updatedById    String       @db.Uuid
+  createdAt      DateTime     @default(now()) @db.Timestamptz
+
+  @@index([trainingPlanId])
+  @@map("training_progress_history")
+}
+
+model TrainingComment {
+  id             String       @id @default(uuid()) @db.Uuid
+  trainingPlanId String       @db.Uuid
+  trainingPlan   TrainingPlan @relation(fields: [trainingPlanId], references: [id], onDelete: Cascade)
+  senderId       String       @db.Uuid // User ID who sent the comment
+  message        String
+  createdAt      DateTime     @default(now()) @db.Timestamptz
+
+  @@index([trainingPlanId])
+  @@map("training_comments")
+}
+
+// ----------------------------------------------------
+// 5. Certificate Management
+// ----------------------------------------------------
+
+model Certificate {
+  id                 String            @id @default(uuid()) @db.Uuid
+  employeeId         String            @db.Uuid
+  employee           Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  trainingPlanId     String?           @db.Uuid
+  trainingPlan       TrainingPlan?     @relation(fields: [trainingPlanId], references: [id], onDelete: SetNull)
+  certificateName    String
+  certificateNumber  String?
+  issuingOrganization String
+  issueDate          DateTime          @db.Date
+  expiryDate         DateTime?         @db.Date
+  filePath           String
+  verificationStatus CertificateStatus @default(PENDING)
+  verifiedById       String?           @db.Uuid
+  verifiedDate       DateTime?         @db.Timestamptz
+  rejectionReason    String?
+  createdAt          DateTime          @default(now()) @db.Timestamptz
+  updatedAt          DateTime          @updatedAt @db.Timestamptz
+
+  @@index([employeeId])
+  @@map("certificates")
+}
+
+// ----------------------------------------------------
+// 6. Learning & Career Paths
+// ----------------------------------------------------
+
+model LearningPath {
+  id            String        @id @default(uuid()) @db.Uuid
+  pathName      String        @unique
+  description   String?
+  targetRoleId  String?       @db.Uuid
+  durationWeeks Int           @default(4)
+  status        AccountStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now()) @db.Timestamptz
+  updatedAt     DateTime      @updatedAt @db.Timestamptz
+
+  items         LearningPathItem[]
+  employees     EmployeeLearningPath[]
+
+  @@map("learning_paths")
+}
+
+model LearningPathItem {
+  id             String       @id @default(uuid()) @db.Uuid
+  learningPathId String       @db.Uuid
+  learningPath   LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+  skillId        String       @db.Uuid
+  skill          Skill        @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  sortOrder      Int          @default(1)
+  milestoneName  String
+  durationWeeks  Int          @default(1)
+
+  @@unique([learningPathId, skillId])
+  @@map("learning_path_items")
+}
+
+model EmployeeLearningPath {
+  id                 String       @id @default(uuid()) @db.Uuid
+  employeeId         String       @db.Uuid
+  employee           Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  learningPathId     String       @db.Uuid
+  learningPath       LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+  status             String       @default("ENROLLED") // ENROLLED, IN_PROGRESS, COMPLETED, DROPPED
+  progressPercentage Int          @default(0)
+  startDate          DateTime     @default(now()) @db.Date
+  completedDate      DateTime?    @db.Date
+
+  @@unique([employeeId, learningPathId])
+  @@map("employee_learning_paths")
+}
+
+model CareerPath {
+  id                String      @id @default(uuid()) @db.Uuid
+  name              String
+  description       String?
+  fromDesignationId String      @db.Uuid
+  fromDesignation   Designation @relation("FromDesignation", fields: [fromDesignationId], references: [id], onDelete: Cascade)
+  toDesignationId   String      @db.Uuid
+  toDesignation     Designation @relation("ToDesignation", fields: [toDesignationId], references: [id], onDelete: Cascade)
+  status            String      @default("ACTIVE")
+  createdAt         DateTime    @default(now()) @db.Timestamptz
+  updatedAt         DateTime    @updatedAt @db.Timestamptz
+
+  skills            CareerPathSkill[]
+
+  @@map("career_paths")
+}
+
+model CareerPathSkill {
+  id            String     @id @default(uuid()) @db.Uuid
+  careerPathId  String     @db.Uuid
+  careerPath    CareerPath @relation(fields: [careerPathId], references: [id], onDelete: Cascade)
+  skillId       String     @db.Uuid
+  skill         Skill      @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  requiredLevel Int        @default(3)
+
+  @@unique([careerPathId, skillId])
+  @@map("career_path_skills")
+}
+
+// ----------------------------------------------------
+// 7. Support Ticket System
+// ----------------------------------------------------
+
+model SupportTicket {
+  id                       String         @id @default(uuid()) @db.Uuid
+  ticketNumber             String         @unique
+  subject                  String
+  description              String
+  category                 TicketCategory
+  priority                 TicketPriority @default(MEDIUM)
+  status                   TicketStatus   @default(OPEN)
+  creatorId                String         @db.Uuid
+  creator                  Employee       @relation("TicketCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  assignedAdminId          String?        @db.Uuid // User ID of the assigned Admin/Support
+  slaDueDate               DateTime       @db.Timestamptz
+  firstResponseDate        DateTime?      @db.Timestamptz
+  resolutionDate           DateTime?      @db.Timestamptz
+  firstResponseTimeMinutes Int?
+  resolutionTimeMinutes    Int?
+  slaStatus                SlaStatus      @default(WITHIN_SLA)
+  breachReason             String?
+  escalationLevel          Int            @default(0)
+  createdAt                DateTime       @default(now()) @db.Timestamptz
+  updatedAt                DateTime       @updatedAt @db.Timestamptz
+
+  messages                 TicketMessage[]
+  attachments              TicketAttachment[]
+  statusHistories          TicketStatusHistory[]
+  slaHistories             TicketSlaHistory[]
+
+  @@index([creatorId])
+  @@index([status])
+  @@index([priority])
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id         String     @id @default(uuid()) @db.Uuid
+  ticketId   String     @db.Uuid
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderId   String     @db.Uuid // User ID of sender
+  message    String
+  isInternal Boolean    @default(false)
+  createdAt  DateTime   @default(now()) @db.Timestamptz
+
+  attachments TicketAttachment[]
+
+  @@index([ticketId])
+  @@map("ticket_messages")
+}
+
+model TicketAttachment {
+  id              String         @id @default(uuid()) @db.Uuid
+  ticketId        String         @db.Uuid
+  ticket          SupportTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketMessageId String?        @db.Uuid
+  ticketMessage   TicketMessage? @relation(fields: [ticketMessageId], references: [id], onDelete: SetNull)
+  fileName        String
+  filePath        String
+  fileSize        Int
+  createdAt       DateTime       @default(now()) @db.Timestamptz
+
+  @@index([ticketId])
+  @@map("ticket_attachments")
+}
+
+model TicketStatusHistory {
+  id          String        @id @default(uuid()) @db.Uuid
+  ticketId    String        @db.Uuid
+  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  status      TicketStatus
+  updatedById String        @db.Uuid // User ID who changed it
+  comment     String?
+  createdAt   DateTime      @default(now()) @db.Timestamptz
+
+  @@index([ticketId])
+  @@map("ticket_status_history")
+}
+
+model TicketSlaHistory {
+  id        String        @id @default(uuid()) @db.Uuid
+  ticketId  String        @db.Uuid
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  action    String
+  status    SlaStatus
+  timestamp DateTime      @default(now()) @db.Timestamptz
+  details   String?
+
+  @@index([ticketId])
+  @@map("ticket_sla_history")
+}
+
+// ----------------------------------------------------
+// 8. Notifications
+// ----------------------------------------------------
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("GENERAL") // GENERAL, SKILL, TRAINING, TICKET, SYSTEM
+  isRead    Boolean  @default(false)
+  deepLink  String?
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @unique @db.Uuid
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailEnabled  Boolean  @default(true)
+  inAppEnabled  Boolean  @default(true)
+  updatedAt     DateTime @updatedAt @db.Timestamptz
+
+  @@map("notification_preferences")
+}
+
+// ----------------------------------------------------
+// 9. Gamification & System
+// ----------------------------------------------------
+
+model Achievement {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  description String
+  type        String   @default("STANDARD") // STANDARD, STREAK, SPEED
+  iconName    String   @default("emoji_events")
+  pointValue  Int      @default(100)
+  badgeCode   String   @unique
+
+  employees   EmployeeAchievement[]
+
+  @@map("achievements")
+}
+
+model EmployeeAchievement {
+  id            String      @id @default(uuid()) @db.Uuid
+  employeeId    String      @db.Uuid
+  employee      Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  achievementId String      @db.Uuid
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  awardedDate   DateTime    @default(now()) @db.Timestamptz
+
+  @@unique([employeeId, achievementId])
+  @@map("employee_achievements")
+}
+
+model SavedFilter {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pageName   String // e.g. "ADMIN_TICKETS", "EMPLOYEE_TRAININGS"
+  filterName String
+  filterData Json
+  createdAt  DateTime @default(now()) @db.Timestamptz
+
+  @@unique([userId, pageName, filterName])
+  @@map("saved_filters")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @db.Uuid
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String // e.g. LOGIN, CREATE_EMPLOYEE, SUBMIT_ASSESSMENT
+  component String // e.g. AUTH, EMPLOYEE, SKILL, TRAINING, TICKET
+  oldValue  Json?
+  newValue  Json?
+  ipAddress String?
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([component])
+  @@map("audit_logs")
+}
+
+model ErrorLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String?  @db.Uuid
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  endpoint     String
+  method       String
+  errorType    String
+  errorMessage String
+  stackTrace   String?
+  requestBody  String?
+  statusCode   Int
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now()) @db.Timestamptz
+
+  @@map("error_logs")
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+
+  @@map("system_settings")
+}
+
+// ----------------------------------------------------
+// 7. Skill Assessments
+// ----------------------------------------------------
+
+model SkillAssessment {
+  id           String        @id @default(uuid()) @db.Uuid
+  title        String
+  description  String?
+  skillId      String        @db.Uuid
+  skill        Skill         @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  passingScore Int           @default(70) // percentage
+  status       AccountStatus @default(ACTIVE)
+  createdAt    DateTime      @default(now()) @db.Timestamptz
+  updatedAt    DateTime      @updatedAt @db.Timestamptz
+
+  questions    SkillAssessmentQuestion[]
+  submissions  SkillAssessmentSubmission[]
+
+  @@map("skill_assessments")
+}
+
+model SkillAssessmentQuestion {
+  id           String          @id @default(uuid()) @db.Uuid
+  assessmentId String          @db.Uuid
+  assessment   SkillAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  questionText String
+  options      String          // Pipe separated options, e.g. "A|B|C|D"
+  correctOption Int            // 0-3 index
+  points       Int             @default(10)
+
+  @@map("skill_assessment_questions")
+}
+
+model SkillAssessmentSubmission {
+  id           String          @id @default(uuid()) @db.Uuid
+  assessmentId String          @db.Uuid
+  assessment   SkillAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  employeeId   String          @db.Uuid
+  employee     Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  score        Int             // percentage scored
+  passed       Boolean
+  answers      String          // JSON array of chosen option indices
+  createdAt    DateTime        @default(now()) @db.Timestamptz
+
+  @@map("skill_assessment_submissions")
+}
+
+// ----------------------------------------------------
+// 10. Project Management
+// ----------------------------------------------------
+
+model Project {
+  id                String          @id @default(uuid()) @db.Uuid
+  projectCode       String          @unique
+  name              String
+  description       String?
+  clientName        String?
+  status            ProjectStatus   @default(PLANNING)
+  priority          ProjectPriority @default(MEDIUM)
+  startDate         DateTime        @db.Date
+  endDate           DateTime?       @db.Date
+  completionPercent Int             @default(0)
+  technologies      String          @default("") // comma-separated
+  repositoryUrl     String?
+  documentationUrl  String?
+  managerId         String?         @db.Uuid
+  manager           Employee?       @relation("ProjectManager", fields: [managerId], references: [id], onDelete: SetNull)
+  createdById       String          @db.Uuid
+  createdAt         DateTime        @default(now()) @db.Timestamptz
+  updatedAt         DateTime        @updatedAt @db.Timestamptz
+
+  assignments       ProjectAssignment[]
+  requiredSkills    ProjectSkillRequirement[]
+
+  @@index([managerId])
+  @@index([status])
+  @@map("projects")
+}
+
+model ProjectAssignment {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  projectId           String                  @db.Uuid
+  project             Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  employeeId          String                  @db.Uuid
+  employee            Employee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  role                String                  @default("Developer")
+  responsibilities    String?
+  contributionPercent Int                     @default(100)
+  status              ProjectAssignmentStatus @default(ACTIVE)
+  joinedAt            DateTime                @default(now()) @db.Timestamptz
+  leftAt              DateTime?               @db.Timestamptz
+  assignedById        String                  @db.Uuid
+
+  @@unique([projectId, employeeId])
+  @@index([projectId])
+  @@index([employeeId])
+  @@map("project_assignments")
+}
+
+model ProjectSkillRequirement {
+  id            String  @id @default(uuid()) @db.Uuid
+  projectId     String  @db.Uuid
+  project       Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  skillId       String  @db.Uuid
+  skill         Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  requiredLevel Int     @default(3)
+
+  @@unique([projectId, skillId])
+  @@map("project_skill_requirements")
+}
+
+// ----------------------------------------------------
+// 11. Employee Languages (for Resume)
+// ----------------------------------------------------
+
+model EmployeeLanguage {
+  id          String              @id @default(uuid()) @db.Uuid
+  employeeId  String              @db.Uuid
+  employee    Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  language    String
+  proficiency LanguageProficiency @default(CONVERSATIONAL)
+
+  @@unique([employeeId, language])
+  @@index([employeeId])
+  @@map("employee_languages")
+}
+
+// ----------------------------------------------------
+// 12. Resume Downloads Log (for CV Reports)
+// ----------------------------------------------------
+
+model ResumeDownload {
+  id             String   @id @default(uuid()) @db.Uuid
+  employeeId     String   @db.Uuid
+  employee       Employee @relation("EmployeeDownloads", fields: [employeeId], references: [id], onDelete: Cascade)
+  downloadedById String   @db.Uuid
+  downloadedBy   User     @relation("UserDownloads", fields: [downloadedById], references: [id], onDelete: Cascade)
+  template       String
+  format         String   // e.g. "PDF", "DOCX", "PRINT"
+  createdAt      DateTime @default(now()) @db.Timestamptz
+
+  @@map("resume_downloads")
+}
+

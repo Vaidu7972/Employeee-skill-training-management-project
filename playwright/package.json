@@ -1,0 +1,16 @@
+{
+  "name": "skillsphere-playwright",
+  "version": "1.0.0",
+  "description": "E2E tests for SkillSphere using Playwright",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "codegen": "playwright codegen"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.42.1",
+    "@types/node": "^20.12.7",
+    "typescript": "^5.4.5"
+  }
+}
