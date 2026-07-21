@@ -1,123 +1,88 @@
-import { Request, Response, NextFunction } from "express";
-import { PrismaClient, TicketStatus, TicketPriority, TicketCategory, SlaStatus, SystemRole, AccountStatus } from "@prisma/client";
+import { Response, NextFunction } from "express";
+import { PrismaClient, SystemRole, TicketStatus, TicketPriority, TicketCategory, SlaStatus, AccountStatus } from "@prisma/client";
 import { createAuditLog } from "../utils/audit";
-import { SLA_HOURS } from "../jobs/sla.job";
 
 const prisma = new PrismaClient();
 
-// Helper to generate a unique ticket number: TK-YYYYMM-XXXXX
-const generateTicketNumber = (): string => {
+// Helper to generate Ticket Number: TKT-YYYYMM-XXXXXX
+const generateTicketNumber = () => {
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
-  const rand = String(Math.floor(Math.random() * 90000) + 10000);
-  return `TK-${year}${month}-${rand}`;
+  const random = String(Math.floor(100000 + Math.random() * 900000));
+  return `TKT-${year}${month}-${random}`;
 };
 
-// Helper to calculate SLA due date
-const calculateSlaDueDate = (priority: TicketPriority): Date => {
-  const hours = SLA_HOURS[priority] || 24;
+// Helper to calculate SLA due date based on priority
+const calculateSlaDueDate = (priority: TicketPriority) => {
   const now = new Date();
-  now.setMinutes(now.getMinutes() + hours * 60);
-  return now;
+  switch (priority) {
+    case TicketPriority.CRITICAL:
+      return new Date(now.getTime() + 1 * 60 * 60 * 1000); // 1 Hour
+    case TicketPriority.HIGH:
+      return new Date(now.getTime() + 4 * 60 * 60 * 1000); // 4 Hours
+    case TicketPriority.MEDIUM:
+      return new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 Hours
+    case TicketPriority.LOW:
+    default:
+      return new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 Hours
+  }
 };
 
-// ----------------------------------------------------
-// Ticket Administration & Management
-// ----------------------------------------------------
-
+// 1. Get List of Tickets
 export const getTickets = async (req: any, res: Response, next: NextFunction) => {
-  const { status, priority, category, search, page = 1, limit = 10 } = req.query;
-  const { id: userId, role, employeeId } = req.user;
-
-  const skip = (Number(page) - 1) * Number(limit);
-  const take = Number(limit);
-
   try {
+    const { role, id: userId, employeeId } = req.user;
     const whereClause: any = {};
 
-    // Security: Employee can only see own tickets
+    // Filters
+    if (req.query.status) {
+      whereClause.status = req.query.status;
+    }
+    if (req.query.priority) {
+      whereClause.priority = req.query.priority;
+    }
+    if (req.query.category) {
+      whereClause.category = req.query.category;
+    }
+
+    // Role restrictions
     if (role === SystemRole.EMPLOYEE) {
-      if (!employeeId) {
-        return res.status(404).json({
-          success: false,
-          message: "Employee profile not found for this user.",
-          code: "NOT_FOUND",
-        });
+      whereClause.employeeId = employeeId;
+    } else if (role === SystemRole.MANAGER) {
+      whereClause.managerId = employeeId;
+    } else if (role === SystemRole.ADMIN) {
+      if (req.query.employeeId) {
+        whereClause.employeeId = req.query.employeeId;
       }
-      whereClause.creatorId = employeeId;
-    }
-
-    // Security: Managers see their team's tickets
-    if (role === SystemRole.MANAGER) {
-      if (!employeeId) {
-        return res.status(404).json({
-          success: false,
-          message: "Manager profile not found for this user.",
-          code: "NOT_FOUND",
-        });
-      }
-      whereClause.creator = {
-        managerId: employeeId,
-      };
-    }
-
-    // Admin filters
-    if (role === SystemRole.SUPER_ADMIN || role === SystemRole.ADMIN_SUPPORT) {
-      if (req.query.creatorId) {
-        whereClause.creatorId = req.query.creatorId as string;
-      }
-      if (req.query.assignedAdminId) {
-        whereClause.assignedAdminId = req.query.assignedAdminId as string;
+      if (req.query.managerId) {
+        whereClause.managerId = req.query.managerId;
       }
     }
 
-    if (status) {
-      whereClause.status = status as TicketStatus;
-    }
-    if (priority) {
-      whereClause.priority = priority as TicketPriority;
-    }
-    if (category) {
-      whereClause.category = category as TicketCategory;
-    }
-    if (search) {
-      whereClause.OR = [
-        { ticketNumber: { contains: String(search), mode: "insensitive" } },
-        { subject: { contains: String(search), mode: "insensitive" } },
-        { description: { contains: String(search), mode: "insensitive" } },
-      ];
-    }
-
-    const [tickets, total] = await prisma.$transaction([
-      prisma.supportTicket.findMany({
-        where: whereClause,
-        include: {
-          creator: true,
+    const tickets = await prisma.supportTicket.findMany({
+      where: whereClause,
+      include: {
+        employee: {
+          select: { id: true, firstName: true, lastName: true, email: true, employeeCode: true },
         },
-        skip,
-        take,
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.supportTicket.count({ where: whereClause }),
-    ]);
+        manager: {
+          select: { id: true, firstName: true, lastName: true, email: true, employeeCode: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
     return res.status(200).json({
       success: true,
-      message: "Tickets retrieved successfully",
       data: tickets,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        totalPages: Math.ceil(total / Number(limit)),
-      },
     });
   } catch (err) {
     next(err);
   }
 };
 
+// 2. Get Ticket Details by ID
 export const getTicketById = async (req: any, res: Response, next: NextFunction) => {
   const { id } = req.params;
   const { role, employeeId } = req.user;
@@ -126,13 +91,21 @@ export const getTicketById = async (req: any, res: Response, next: NextFunction)
     const ticket = await prisma.supportTicket.findUnique({
       where: { id },
       include: {
-        creator: true,
-        messages: {
+        employee: true,
+        manager: true,
+        comments: {
           orderBy: { createdAt: "asc" },
-          include: { attachments: true },
+          include: {
+            attachments: true,
+          },
         },
         attachments: true,
-        statusHistories: true,
+        histories: {
+          orderBy: { createdAt: "desc" },
+        },
+        slaHistories: {
+          orderBy: { timestamp: "desc" },
+        },
       },
     });
 
@@ -144,8 +117,8 @@ export const getTicketById = async (req: any, res: Response, next: NextFunction)
       });
     }
 
-    // Security check: Employee must own this ticket
-    if (role === SystemRole.EMPLOYEE && ticket.creatorId !== employeeId) {
+    // Security: Validate access rights
+    if (role === SystemRole.EMPLOYEE && ticket.employeeId !== employeeId) {
       return res.status(403).json({
         success: false,
         message: "You are not authorized to view this ticket.",
@@ -153,23 +126,21 @@ export const getTicketById = async (req: any, res: Response, next: NextFunction)
       });
     }
 
-    // Security check: Manager can only view if it belongs to team
-    if (role === SystemRole.MANAGER && ticket.creator.managerId !== employeeId) {
+    if (role === SystemRole.MANAGER && ticket.managerId !== employeeId) {
       return res.status(403).json({
         success: false,
-        message: "You are not authorized to view this team ticket.",
+        message: "You are not authorized to view this ticket.",
         code: "FORBIDDEN",
       });
     }
 
-    // Filter out internal messages if requester is employee
-    if (role === SystemRole.EMPLOYEE) {
-      ticket.messages = ticket.messages.filter((m: any) => !m.isInternal);
+    // Filter out internal comments from Employee/Manager visibility
+    if (role !== SystemRole.ADMIN) {
+      ticket.comments = ticket.comments.filter((c: any) => !c.isInternalNote);
     }
 
     return res.status(200).json({
       success: true,
-      message: "Ticket details retrieved successfully",
       data: ticket,
     });
   } catch (err) {
@@ -177,24 +148,17 @@ export const getTicketById = async (req: any, res: Response, next: NextFunction)
   }
 };
 
+// 3. Create Ticket (Employee or Manager raises a ticket)
 export const createTicket = async (req: any, res: Response, next: NextFunction) => {
   const { subject, description, category, priority } = req.body;
-  const { id: userId, employeeId } = req.user;
+  const { id: userId, role, employeeId } = req.user;
 
   try {
     if (!subject || !description || !category) {
       return res.status(400).json({
         success: false,
-        message: "Subject, description, and category are required",
+        message: "Subject, description, and category are required fields.",
         code: "VALIDATION_ERROR",
-      });
-    }
-
-    if (!employeeId) {
-      return res.status(404).json({
-        success: false,
-        message: "Employee profile not found. Tickets can only be opened by employees.",
-        code: "NOT_FOUND",
       });
     }
 
@@ -210,7 +174,10 @@ export const createTicket = async (req: any, res: Response, next: NextFunction) 
           description,
           category: category as TicketCategory,
           priority: prio,
-          creatorId: employeeId,
+          createdByUserId: userId,
+          createdByRole: role,
+          employeeId: role === SystemRole.EMPLOYEE ? employeeId : null,
+          managerId: role === SystemRole.MANAGER ? employeeId : null,
           slaDueDate,
           status: TicketStatus.OPEN,
           slaStatus: SlaStatus.WITHIN_SLA,
@@ -218,12 +185,14 @@ export const createTicket = async (req: any, res: Response, next: NextFunction) 
       });
 
       // Save initial status history
-      await tx.ticketStatusHistory.create({
+      await tx.ticketHistory.create({
         data: {
           ticketId: created.id,
-          status: TicketStatus.OPEN,
-          updatedById: userId,
-          comment: "Ticket opened by employee.",
+          action: "TICKET_CREATED",
+          newStatus: TicketStatus.OPEN,
+          performedByUserId: userId,
+          performedByRole: role,
+          comment: `Ticket opened by ${role.toLowerCase()}.`,
         },
       });
 
@@ -237,42 +206,23 @@ export const createTicket = async (req: any, res: Response, next: NextFunction) 
         },
       });
 
-      // Fetch employee's manager info
-      const employee = await tx.employee.findUnique({
-        where: { id: employeeId },
-        select: { manager: { select: { userId: true } } },
+      // Send routing notifications to Admins
+      const supportAdmins = await tx.user.findMany({
+        where: {
+          role: SystemRole.ADMIN,
+          status: AccountStatus.ACTIVE,
+        },
       });
 
-      if (employee?.manager?.userId) {
-        // Route ticket to Manager
-        await tx.notification.create({
-          data: {
-            userId: employee.manager.userId,
-            title: `🆕 New Team Ticket: #${ticketNumber}`,
-            message: `Your team member has opened ticket #${ticketNumber} in "${category}".`,
-            type: "TICKET",
-            deepLink: `/manager/dashboard?tab=tickets&id=${created.id}`,
-          },
-        });
-      } else {
-        // No Manager: Route directly to Support Admins
-        const supportAdmins = await tx.user.findMany({
-          where: {
-            role: { in: [SystemRole.SUPER_ADMIN, SystemRole.ADMIN_SUPPORT] },
-            status: AccountStatus.ACTIVE,
-          },
-        });
-
-        await tx.notification.createMany({
-          data: supportAdmins.map((adm) => ({
-            userId: adm.id,
-            title: `🆕 New Support Ticket: #${ticketNumber}`,
-            message: `Ticket #${ticketNumber} has been opened in "${category}" with priority "${prio}".`,
-            type: "TICKET",
-            deepLink: `/admin/tickets?id=${created.id}`,
-          })),
-        });
-      }
+      await tx.notification.createMany({
+        data: supportAdmins.map((adm) => ({
+          userId: adm.id,
+          title: `🆕 New Ticket: ${ticketNumber}`,
+          message: `${role} raised ticket ${ticketNumber} in category "${category}".`,
+          type: "TICKET",
+          deepLink: `/admin/tickets?id=${created.id}`,
+        })),
+      });
 
       return created;
     });
@@ -289,9 +239,10 @@ export const createTicket = async (req: any, res: Response, next: NextFunction) 
   }
 };
 
+// 4. Assign Ticket (Admin assigns to a support user/admin)
 export const assignTicket = async (req: any, res: Response, next: NextFunction) => {
   const { id } = req.params;
-  const { assignedAdminId } = req.body; // User ID of support agent
+  const { assignedAdminId } = req.body;
   const adminId = req.user.id;
 
   try {
@@ -305,11 +256,10 @@ export const assignTicket = async (req: any, res: Response, next: NextFunction) 
     }
 
     const admin = await prisma.user.findUnique({ where: { id: assignedAdminId } });
-    const allowedRoles: SystemRole[] = [SystemRole.SUPER_ADMIN, SystemRole.ADMIN_SUPPORT];
-    if (!admin || !allowedRoles.includes(admin.role)) {
+    if (!admin || admin.role !== SystemRole.ADMIN) {
       return res.status(400).json({
         success: false,
-        message: "Assigned user must be a valid support agent or admin",
+        message: "Assigned user must be a valid admin",
         code: "VALIDATION_ERROR",
       });
     }
@@ -323,21 +273,23 @@ export const assignTicket = async (req: any, res: Response, next: NextFunction) 
         },
       });
 
-      await tx.ticketStatusHistory.create({
+      await tx.ticketHistory.create({
         data: {
           ticketId: id,
-          status: TicketStatus.ASSIGNED,
-          updatedById: adminId,
-          comment: `Ticket assigned to support agent.`,
+          action: "TICKET_ASSIGNED",
+          oldStatus: ticket.status,
+          newStatus: TicketStatus.ASSIGNED,
+          performedByUserId: adminId,
+          performedByRole: SystemRole.ADMIN,
+          comment: `Ticket assigned to admin.`,
         },
       });
 
-      // Notify the assigned agent
       await tx.notification.create({
         data: {
           userId: assignedAdminId,
-          title: `Ticket Assigned: #${ticket.ticketNumber}`,
-          message: `Support ticket #${ticket.ticketNumber} has been assigned to you.`,
+          title: `Ticket Assigned: ${ticket.ticketNumber}`,
+          message: `Support ticket ${ticket.ticketNumber} has been assigned to you.`,
           type: "TICKET",
           deepLink: `/admin/tickets?id=${id}`,
         },
@@ -358,6 +310,7 @@ export const assignTicket = async (req: any, res: Response, next: NextFunction) 
   }
 };
 
+// 5. Escalate Ticket (Manager or Admin escalates)
 export const escalateTicket = async (req: any, res: Response, next: NextFunction) => {
   const { id } = req.params;
   const { reason } = req.body;
@@ -366,7 +319,6 @@ export const escalateTicket = async (req: any, res: Response, next: NextFunction
   try {
     const ticket = await prisma.supportTicket.findUnique({
       where: { id },
-      include: { creator: true },
     });
 
     if (!ticket) {
@@ -377,11 +329,11 @@ export const escalateTicket = async (req: any, res: Response, next: NextFunction
       });
     }
 
-    // Security: Only the team manager or admin can escalate
-    if (role === SystemRole.MANAGER && ticket.creator.managerId !== employeeId) {
+    // Security: Only Manager (creator of ticket or creator's manager) or Admin can escalate
+    if (role === SystemRole.MANAGER && ticket.managerId !== employeeId) {
       return res.status(403).json({
         success: false,
-        message: "You can only escalate tickets belonging to your team.",
+        message: "You can only escalate your own manager support tickets.",
         code: "FORBIDDEN",
       });
     }
@@ -395,29 +347,33 @@ export const escalateTicket = async (req: any, res: Response, next: NextFunction
         },
       });
 
-      await tx.ticketStatusHistory.create({
+      await tx.ticketHistory.create({
         data: {
           ticketId: id,
-          status: TicketStatus.ESCALATED,
-          updatedById: userId,
-          comment: `Ticket escalated to Admin Support. Reason: ${reason || "Escalated by manager"}`,
+          action: "TICKET_ESCALATED",
+          oldStatus: ticket.status,
+          newStatus: TicketStatus.ESCALATED,
+          performedByUserId: userId,
+          performedByRole: role,
+          comment: `Ticket escalated. Reason: ${reason || "Escalated by user"}`,
         },
       });
 
-      // Post internal message
-      await tx.ticketMessage.create({
+      // Post comment stating escalation
+      await tx.ticketComment.create({
         data: {
           ticketId: id,
-          senderId: userId,
-          message: `--- TICKET ESCALATED TO ADMIN SUPPORT ---\nReason: ${reason || "Not specified"}`,
-          isInternal: false,
+          senderUserId: userId,
+          senderRole: role,
+          message: `--- TICKET ESCALATED ---\nReason: ${reason || "Not specified"}`,
+          isInternalNote: false,
         },
       });
 
-      // Notify Support & Super Admins
+      // Notify Admins
       const supportAdmins = await tx.user.findMany({
         where: {
-          role: { in: [SystemRole.SUPER_ADMIN, SystemRole.ADMIN_SUPPORT] },
+          role: SystemRole.ADMIN,
           status: AccountStatus.ACTIVE,
         },
       });
@@ -425,8 +381,8 @@ export const escalateTicket = async (req: any, res: Response, next: NextFunction
       await tx.notification.createMany({
         data: supportAdmins.map((adm) => ({
           userId: adm.id,
-          title: `⚠️ Escalated Ticket: #${ticket.ticketNumber}`,
-          message: `Ticket #${ticket.ticketNumber} was escalated by manager.`,
+          title: `⚠️ Escalated Ticket: ${ticket.ticketNumber}`,
+          message: `Ticket ${ticket.ticketNumber} has been escalated.`,
           type: "TICKET",
           deepLink: `/admin/tickets?id=${id}`,
         })),
@@ -439,7 +395,7 @@ export const escalateTicket = async (req: any, res: Response, next: NextFunction
 
     return res.status(200).json({
       success: true,
-      message: "Ticket escalated to Admin Support successfully",
+      message: "Ticket escalated successfully",
       data: updated,
     });
   } catch (err) {
@@ -447,6 +403,7 @@ export const escalateTicket = async (req: any, res: Response, next: NextFunction
   }
 };
 
+// 6. Post Ticket Comment (Public reply or Internal note)
 export const addTicketMessage = async (req: any, res: Response, next: NextFunction) => {
   const { id } = req.params; // Ticket ID
   const { message, isInternal } = req.body;
@@ -455,7 +412,6 @@ export const addTicketMessage = async (req: any, res: Response, next: NextFuncti
   try {
     const ticket = await prisma.supportTicket.findUnique({
       where: { id },
-      include: { creator: true },
     });
 
     if (!ticket) {
@@ -469,14 +425,14 @@ export const addTicketMessage = async (req: any, res: Response, next: NextFuncti
     if (ticket.status === TicketStatus.CLOSED) {
       return res.status(400).json({
         success: false,
-        message: "Replies cannot be added to a closed ticket. Please reopen it first.",
+        message: "Replies cannot be added to a closed ticket. Please reopen first.",
         code: "VALIDATION_ERROR",
       });
     }
 
-    // Security: Employee cannot write to other tickets and cannot write internal notes
+    // Role check constraints
     if (role === SystemRole.EMPLOYEE) {
-      if (ticket.creatorId !== employeeId) {
+      if (ticket.employeeId !== employeeId) {
         return res.status(403).json({
           success: false,
           message: "You are not authorized to reply to this ticket.",
@@ -486,76 +442,84 @@ export const addTicketMessage = async (req: any, res: Response, next: NextFuncti
       if (isInternal === "true" || isInternal === true) {
         return res.status(403).json({
           success: false,
-          message: "Employees are not authorized to create internal notes.",
+          message: "Employees cannot create internal notes.",
           code: "FORBIDDEN",
         });
       }
     }
 
-    // Security: Manager must own the employee
     if (role === SystemRole.MANAGER) {
-      if (ticket.creator.managerId !== employeeId) {
+      if (ticket.managerId !== employeeId) {
         return res.status(403).json({
           success: false,
           message: "You are not authorized to reply to this ticket.",
           code: "FORBIDDEN",
         });
       }
+      if (isInternal === "true" || isInternal === true) {
+        return res.status(403).json({
+          success: false,
+          message: "Managers cannot create internal notes.",
+          code: "FORBIDDEN",
+        });
+      }
     }
 
-    const internalFlag = (role === SystemRole.SUPER_ADMIN || role === SystemRole.ADMIN_SUPPORT || role === SystemRole.MANAGER) && (isInternal === "true" || isInternal === true);
+    const internalFlag = role === SystemRole.ADMIN && (isInternal === "true" || isInternal === true);
 
     const msg = await prisma.$transaction(async (tx) => {
-      // Create message
-      const createdMsg = await tx.ticketMessage.create({
+      // Create Comment
+      const createdComment = await tx.ticketComment.create({
         data: {
           ticketId: id,
-          senderId: userId,
+          senderUserId: userId,
+          senderRole: role,
           message,
-          isInternal: internalFlag,
+          isInternalNote: internalFlag,
         },
       });
 
-      // Handle attachments
+      // Save attachment details if present
       if (req.file) {
         await tx.ticketAttachment.create({
           data: {
             ticketId: id,
-            ticketMessageId: createdMsg.id,
-            fileName: req.file.originalname,
+            commentId: createdComment.id,
+            fileName: req.file.filename,
+            originalFileName: req.file.originalname,
             filePath: req.file.path.replace(/\\/g, "/"),
+            mimeType: req.file.mimetype || "application/octet-stream",
             fileSize: req.file.size,
+            uploadedByUserId: userId,
           },
         });
       }
 
-      // Update ticket status based on workflow
+      // Update ticket status
       let nextStatus = ticket.status;
       let slaAction = "";
       let firstResponseUpdate: any = {};
 
-      if (role === SystemRole.SUPER_ADMIN || role === SystemRole.ADMIN_SUPPORT || role === SystemRole.MANAGER) {
+      if (role === SystemRole.ADMIN) {
         if (!internalFlag) {
           nextStatus = TicketStatus.WAITING_USER;
-          
-          // Check SLA Response Calculations
+          // First response SLA check
           if (!ticket.firstResponseDate) {
             const now = new Date();
             const firstResponseTimeMinutes = Math.round((now.getTime() - ticket.createdAt.getTime()) / (1000 * 60));
             const isWithinSla = now <= ticket.slaDueDate;
-            
+
             firstResponseUpdate = {
               firstResponseDate: now,
               firstResponseTimeMinutes,
               slaStatus: isWithinSla ? SlaStatus.COMPLETED_WITHIN_SLA : SlaStatus.COMPLETED_AFTER_SLA,
             };
-
             slaAction = "FIRST_RESPONSE";
           }
         }
-      } else if (role === SystemRole.EMPLOYEE) {
-        // If ticket is escalated, keep/shift to IN_PROGRESS. Otherwise shift to WAITING_MANAGER
-        nextStatus = ticket.status === TicketStatus.ESCALATED ? TicketStatus.IN_PROGRESS : TicketStatus.WAITING_MANAGER;
+      } else {
+        // Employee or Manager replied
+        nextStatus = TicketStatus.IN_PROGRESS;
       }
 
       await tx.supportTicket.update({
@@ -566,84 +530,67 @@ export const addTicketMessage = async (req: any, res: Response, next: NextFuncti
         },
       });
 
-      // Log status changes
       if (nextStatus !== ticket.status) {
-        await tx.ticketStatusHistory.create({
+        await tx.ticketHistory.create({
           data: {
             ticketId: id,
-            status: nextStatus,
-            updatedById: userId,
-            comment: `Status automatically shifted on message post.`,
+            action: "STATUS_CHANGE",
+            oldStatus: ticket.status,
+            newStatus: nextStatus,
+            performedByUserId: userId,
+            performedByRole: role,
+            comment: `Status updated to ${nextStatus} on message posting.`,
           },
         });
       }
 
-      // Log SLA response completed
       if (slaAction) {
         await tx.ticketSlaHistory.create({
           data: {
             ticketId: id,
             action: slaAction,
             status: firstResponseUpdate.slaStatus,
-            details: `First response SLA fulfilled in ${firstResponseUpdate.firstResponseTimeMinutes} mins. Status: ${firstResponseUpdate.slaStatus}`,
+            details: `First response SLA met. Response time: ${firstResponseUpdate.firstResponseTimeMinutes} mins.`,
           },
         });
       }
 
-      // Notify recipient
-      if (role === SystemRole.EMPLOYEE) {
-        // Notify manager or admin depending on escalation status
-        if (ticket.status === TicketStatus.ESCALATED) {
-          if (ticket.assignedAdminId) {
-            await tx.notification.create({
-              data: {
-                userId: ticket.assignedAdminId,
-                title: `💬 New Reply: Ticket #${ticket.ticketNumber}`,
-                message: `The employee has replied to ticket #${ticket.ticketNumber}.`,
-                type: "TICKET",
-                deepLink: `/admin/tickets?id=${id}`,
-              },
-            });
-          }
-        } else {
-          // Notify Manager
-          const employee = await tx.employee.findUnique({
-            where: { id: employeeId },
-            select: { manager: { select: { userId: true } } },
-          });
-          if (employee?.manager?.userId) {
-            await tx.notification.create({
-              data: {
-                userId: employee.manager.userId,
-                title: `💬 New Reply: Ticket #${ticket.ticketNumber}`,
-                message: `The employee has replied to ticket #${ticket.ticketNumber}.`,
-                type: "TICKET",
-                deepLink: `/manager/dashboard?tab=tickets&id=${id}`,
-              },
-            });
-          }
-        }
-      } else if (!internalFlag && ticket.creator.userId) {
-        // Notify employee of public response
+      // Route notifications
+      if (role === SystemRole.ADMIN && !internalFlag) {
+        const notifyUserId = ticket.createdByUserId;
         await tx.notification.create({
           data: {
-            userId: ticket.creator.userId,
-            title: `💬 Support Response: Ticket #${ticket.ticketNumber}`,
-            message: `A response has been posted to your ticket #${ticket.ticketNumber}.`,
+            userId: notifyUserId,
+            title: `💬 Ticket Update: ${ticket.ticketNumber}`,
+            message: `Admin posted a reply to ticket ${ticket.ticketNumber}.`,
             type: "TICKET",
-            deepLink: `/employee/my-tickets?id=${id}`,
+            deepLink: role === SystemRole.EMPLOYEE ? `/employee/my-tickets?id=${id}` : `/manager/dashboard?tab=tickets&id=${id}`,
           },
         });
+      } else if (role !== SystemRole.ADMIN) {
+        // Notify assigned admin or routing list
+        const notifyUserId = ticket.assignedAdminId;
+        if (notifyUserId) {
+          await tx.notification.create({
+            data: {
+              userId: notifyUserId,
+              title: `💬 Reply Posted: ${ticket.ticketNumber}`,
+              message: `A reply was added by the sender on ticket ${ticket.ticketNumber}.`,
+              type: "TICKET",
+              deepLink: `/admin/tickets?id=${id}`,
+            },
+          });
+        }
       }
 
-      return createdMsg;
+      return createdComment;
     });
 
-    await createAuditLog(userId, internalFlag ? "ADD_INTERNAL_NOTE" : "ADD_TICKET_REPLY", "TICKET", null, { messageId: msg.id });
+    await createAuditLog(userId, internalFlag ? "ADD_INTERNAL_NOTE" : "ADD_TICKET_REPLY", "TICKET", null, { commentId: msg.id });
 
     return res.status(201).json({
       success: true,
-      message: internalFlag ? "Internal note posted" : "Reply posted successfully",
+      message: internalFlag ? "Internal note posted successfully" : "Reply posted successfully",
       data: msg,
     });
   } catch (err) {
@@ -651,6 +598,7 @@ export const addTicketMessage = async (req: any, res: Response, next: NextFuncti
   }
 };
 
+// 7. Resolve Ticket
 export const resolveTicket = async (req: any, res: Response, next: NextFunction) => {
   const { id } = req.params;
   const { resolutionDetails } = req.body;
@@ -661,14 +609,13 @@ export const resolveTicket = async (req: any, res: Response, next: NextFunction)
     if (!resolutionDetails) {
       return res.status(400).json({
         success: false,
-        message: "Resolution details are required",
+        message: "Resolution details are required to resolve a ticket.",
         code: "VALIDATION_ERROR",
       });
     }
 
     const ticket = await prisma.supportTicket.findUnique({
       where: { id },
-      include: { creator: true },
     });
 
     if (!ticket) {
@@ -679,11 +626,11 @@ export const resolveTicket = async (req: any, res: Response, next: NextFunction)
       });
     }
 
-    // Security: Only manager of team or admin can resolve
-    if (role === SystemRole.MANAGER && ticket.creator.managerId !== employeeId) {
+    // Only Admin can resolve tickets in this version (Consolidated roles check)
+    if (role !== SystemRole.ADMIN) {
       return res.status(403).json({
         success: false,
-        message: "You can only resolve tickets belonging to your team.",
+        message: "Only Admins are authorized to resolve support tickets.",
         code: "FORBIDDEN",
       });
     }
@@ -698,41 +645,43 @@ export const resolveTicket = async (req: any, res: Response, next: NextFunction)
           status: TicketStatus.RESOLVED,
           resolutionDate: now,
           resolutionTimeMinutes,
+          resolution: resolutionDetails,
+          resolvedAt: now,
         },
       });
 
-      // Status history
-      await tx.ticketStatusHistory.create({
+      await tx.ticketHistory.create({
         data: {
           ticketId: id,
-          status: TicketStatus.RESOLVED,
-          updatedById: userId,
-          comment: `Ticket marked RESOLVED. Details: ${resolutionDetails}`,
+          action: "TICKET_RESOLVED",
+          oldStatus: ticket.status,
+          newStatus: TicketStatus.RESOLVED,
+          performedByUserId: userId,
+          performedByRole: role,
+          comment: `Ticket marked as RESOLVED. Resolution: ${resolutionDetails}`,
         },
       });
 
-      // Post public message with resolution
-      await tx.ticketMessage.create({
+      await tx.ticketComment.create({
         data: {
           ticketId: id,
-          senderId: userId,
+          senderUserId: userId,
+          senderRole: role,
           message: `--- RESOLUTION DETAILS ---\n${resolutionDetails}`,
-          isInternal: false,
+          isInternalNote: false,
         },
       });
 
-      // Notify employee
-      if (ticket.creator.userId) {
-        await tx.notification.create({
-          data: {
-            userId: ticket.creator.userId,
-            title: `✅ Ticket Resolved: #${ticket.ticketNumber}`,
-            message: `Your support ticket #${ticket.ticketNumber} has been resolved. Please confirm or reopen.`,
-            type: "TICKET",
-            deepLink: `/employee/my-tickets?id=${id}`,
-          },
-        });
-      }
+      // Notify creator
+      await tx.notification.create({
+        data: {
+          userId: ticket.createdByUserId,
+          title: `✅ Ticket Resolved: ${ticket.ticketNumber}`,
+          message: `Your ticket ${ticket.ticketNumber} has been resolved.`,
+          type: "TICKET",
+          deepLink: ticket.createdByRole === SystemRole.EMPLOYEE ? `/employee/my-tickets?id=${id}` : `/manager/dashboard?tab=tickets&id=${id}`,
+        },
+      });
 
       return up;
     });
@@ -749,9 +698,10 @@ export const resolveTicket = async (req: any, res: Response, next: NextFunction)
   }
 };
 
+// 8. Confirm Resolution (Close Ticket)
 export const confirmResolution = async (req: any, res: Response, next: NextFunction) => {
   const { id } = req.params;
-  const { employeeId, id: userId } = req.user;
+  const { employeeId, id: userId, role } = req.user;
 
   try {
     const ticket = await prisma.supportTicket.findUnique({ where: { id } });
@@ -764,10 +714,10 @@ export const confirmResolution = async (req: any, res: Response, next: NextFunct
     }
 
     // Security: Only owner can confirm
-    if (ticket.creatorId !== employeeId) {
+    if (ticket.createdByUserId !== userId) {
       return res.status(403).json({
         success: false,
-        message: "You can only confirm resolution for your own tickets.",
+        message: "You can only close tickets you have raised.",
         code: "FORBIDDEN",
       });
     }
@@ -777,22 +727,26 @@ export const confirmResolution = async (req: any, res: Response, next: NextFunct
         where: { id },
         data: {
           status: TicketStatus.CLOSED,
+          closedAt: new Date(),
         },
       });
 
-      await tx.ticketStatusHistory.create({
+      await tx.ticketHistory.create({
         data: {
           ticketId: id,
-          status: TicketStatus.CLOSED,
-          updatedById: userId,
-          comment: "Employee confirmed resolution. Ticket closed.",
+          action: "TICKET_CLOSED",
+          oldStatus: ticket.status,
+          newStatus: TicketStatus.CLOSED,
+          performedByUserId: userId,
+          performedByRole: role,
+          comment: "User confirmed resolution. Ticket closed.",
         },
       });
 
       return up;
     });
 
-    await createAuditLog(userId, "CONFIRM_RESOLUTION", "TICKET", ticket, updated);
+    await createAuditLog(userId, "CLOSE_TICKET", "TICKET", ticket, updated);
 
     return res.status(200).json({
       success: true,
@@ -804,10 +758,11 @@ export const confirmResolution = async (req: any, res: Response, next: NextFunct
   }
 };
 
+// 9. Reopen Ticket
 export const reopenTicket = async (req: any, res: Response, next: NextFunction) => {
   const { id } = req.params;
   const { reason } = req.body;
-  const { employeeId, id: userId } = req.user;
+  const { employeeId, id: userId, role } = req.user;
 
   try {
     const ticket = await prisma.supportTicket.findUnique({ where: { id } });
@@ -819,10 +774,10 @@ export const reopenTicket = async (req: any, res: Response, next: NextFunction) 
       });
     }
 
-    if (ticket.creatorId !== employeeId) {
+    if (ticket.createdByUserId !== userId) {
       return res.status(403).json({
         success: false,
-        message: "You can only reopen your own tickets.",
+        message: "You can only reopen tickets you have raised.",
         code: "FORBIDDEN",
       });
     }
@@ -835,14 +790,14 @@ export const reopenTicket = async (req: any, res: Response, next: NextFunction) 
       });
     }
 
-    // Reopen window check (e.g. within 3 days / 72 hours of resolutionDate)
-    if (ticket.resolutionDate) {
-      const limitDate = new Date(ticket.resolutionDate);
+    // Check reopen limit (3 days)
+    if (ticket.resolvedAt) {
+      const limitDate = new Date(ticket.resolvedAt);
       limitDate.setDate(limitDate.getDate() + 3);
       if (new Date() > limitDate) {
         return res.status(400).json({
           success: false,
-          message: "Reopen limit exceeded. You cannot reopen a ticket after 3 days of resolution. Please open a new ticket.",
+          message: "Reopen limit exceeded. You cannot reopen a ticket 3 days after resolution.",
           code: "LIMIT_EXCEEDED",
         });
       }
@@ -853,58 +808,44 @@ export const reopenTicket = async (req: any, res: Response, next: NextFunction) 
         where: { id },
         data: {
           status: TicketStatus.REOPENED,
-          slaDueDate: calculateSlaDueDate(ticket.priority), // reset SLA timer
+          slaDueDate: calculateSlaDueDate(ticket.priority),
+          reopenedAt: new Date(),
         },
       });
 
-      await tx.ticketStatusHistory.create({
+      await tx.ticketHistory.create({
         data: {
           ticketId: id,
-          status: TicketStatus.REOPENED,
-          updatedById: userId,
-          comment: `Ticket reopened by employee. Reason: ${reason || "Not specified"}`,
+          action: "TICKET_REOPENED",
+          oldStatus: ticket.status,
+          newStatus: TicketStatus.REOPENED,
+          performedByUserId: userId,
+          performedByRole: role,
+          comment: `Ticket reopened. Reason: ${reason || "Not specified"}`,
         },
       });
 
-      await tx.ticketMessage.create({
+      await tx.ticketComment.create({
         data: {
           ticketId: id,
-          senderId: userId,
+          senderUserId: userId,
+          senderRole: role,
           message: `--- TICKET REOPENED ---\nReason: ${reason || "Not specified"}`,
-          isInternal: false,
+          isInternalNote: false,
         },
       });
 
-      // Notify assigned admin or manager depending on escalation status
-      if (ticket.status === TicketStatus.ESCALATED) {
-        if (ticket.assignedAdminId) {
-          await tx.notification.create({
-            data: {
-              userId: ticket.assignedAdminId,
-              title: `⚠️ Ticket Reopened: #${ticket.ticketNumber}`,
-              message: `Ticket #${ticket.ticketNumber} was reopened by the employee.`,
-              type: "TICKET",
-              deepLink: `/admin/tickets?id=${id}`,
-            },
-          });
-        }
-      } else {
-        // Notify Manager
-        const employee = await tx.employee.findUnique({
-          where: { id: employeeId },
-          select: { manager: { select: { userId: true } } },
+      // Notify assigned admin
+      if (ticket.assignedAdminId) {
+        await tx.notification.create({
+          data: {
+            userId: ticket.assignedAdminId,
+            title: `⚠️ Ticket Reopened: ${ticket.ticketNumber}`,
+            message: `Ticket ${ticket.ticketNumber} was reopened by the user.`,
+            type: "TICKET",
+            deepLink: `/admin/tickets?id=${id}`,
+          },
         });
-        if (employee?.manager?.userId) {
-          await tx.notification.create({
-            data: {
-              userId: employee.manager.userId,
-              title: `⚠️ Ticket Reopened: #${ticket.ticketNumber}`,
-              message: `Ticket #${ticket.ticketNumber} was reopened by the employee.`,
-              type: "TICKET",
-              deepLink: `/manager/dashboard?tab=tickets&id=${id}`,
-            },
-          });
-        }
       }
 
       return up;

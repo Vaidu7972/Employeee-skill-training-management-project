@@ -29,7 +29,8 @@ export const initSlaScheduler = () => {
           },
         },
         include: {
-          creator: true,
+          employee: true,
+          manager: true,
         },
       });
 
@@ -92,7 +93,7 @@ export const initSlaScheduler = () => {
             const admins = await tx.user.findMany({
               where: {
                 role: {
-                  in: ["SUPER_ADMIN", "ADMIN_SUPPORT"],
+                  in: ["ADMIN", "ADMIN"],
                 },
                 status: "ACTIVE",
               },

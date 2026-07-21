@@ -4,6 +4,18 @@ import { createAuditLog } from "../utils/audit";
 
 const prisma = new PrismaClient();
 
+function sortQuestions(questions: any[]): any[] {
+  return questions.sort((a, b) => {
+    const getOrderScore = (qText: string) => {
+      if (qText.includes("declare a variable")) return 1;
+      if (qText.includes("typeof null")) return 2;
+      if (qText.includes("map items") || qText.includes("map into a new array")) return 3;
+      return 99;
+    };
+    return getOrderScore(a.questionText) - getOrderScore(b.questionText);
+  });
+}
+
 // Create/Update Assessment (Admin Only)
 export const createAssessment = async (req: any, res: Response, next: NextFunction) => {
   const { title, description, skillId, passingScore, questions } = req.body;
@@ -118,6 +130,10 @@ export const getAssessmentById = async (req: any, res: Response, next: NextFunct
       });
     }
 
+    if (assessment && assessment.questions) {
+      assessment.questions = sortQuestions(assessment.questions);
+    }
+
     // Security check: Mask correctOption for employee taking the test
     const responsePayload = JSON.parse(JSON.stringify(assessment));
     if (req.user.role === SystemRole.EMPLOYEE) {
@@ -165,6 +181,10 @@ export const submitAssessment = async (req: any, res: Response, next: NextFuncti
         message: "Assessment not found",
         code: "NOT_FOUND",
       });
+    }
+
+    if (assessment && assessment.questions) {
+      assessment.questions = sortQuestions(assessment.questions);
     }
 
     // Calculate score

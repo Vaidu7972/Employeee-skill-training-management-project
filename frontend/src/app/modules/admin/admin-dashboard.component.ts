@@ -5,6 +5,7 @@ import { DataService } from "../../core/services/data.service";
 import { Chart } from "chart.js/auto";
 import { filter } from "rxjs/operators";
 import { Subscription } from "rxjs";
+import { exportToCsv, exportToExcel, printTable, exportToPdf, exportHtmlToPdf } from "../../core/utils/export.utils";
 
 @Component({
   selector: "app-admin-dashboard",
@@ -150,7 +151,733 @@ import { Subscription } from "rxjs";
         </div>
       </div>
 
-      <!-- 5. Forms Modals Overlay -->
+
+      </ng-container>
+
+      <!-- ======================================================= -->
+      <!-- PROJECTS TAB -->
+      <!-- ======================================================= -->
+      <div *ngIf="activeTab === 'projects'" class="tab-content">
+        <div class="dashboard-card" style="margin-bottom:20px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+            <h4 style="margin:0;">Projects ({{ projects.length }})</h4>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+              <input class="form-control" style="width:220px;" [(ngModel)]="projectSearch" (input)="filterProjects()" placeholder="Search projects..." />
+              <select class="form-control" [(ngModel)]="projectStatusFilter" (change)="filterProjects()" style="width:150px;">
+                <option value="">All Statuses</option>
+                <option value="PLANNING">Planning</option>
+                <option value="ACTIVE">Active</option>
+                <option value="ON_HOLD">On Hold</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="ARCHIVED">Archived</option>
+              </select>
+              <button class="btn btn-primary" (click)="openModal('project')">
+                <span class="material-icons" style="font-size:16px;">add</span> New Project
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Name</th>
+                  <th>Client</th>
+                  <th>Manager</th>
+                  <th>Status</th>
+                  <th>Priority</th>
+                  <th>Team</th>
+                  <th>Completion</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let p of filteredProjects">
+                  <td><span style="font-size:11px; font-family:monospace; background:var(--surface-hover); padding:2px 6px; border-radius:4px;">{{ p.projectCode }}</span></td>
+                  <td><strong>{{ p.name }}</strong></td>
+                  <td>{{ p.clientName || '—' }}</td>
+                  <td>{{ p.manager ? p.manager.firstName + ' ' + p.manager.lastName : '—' }}</td>
+                  <td><span class="badge badge-info">{{ p.status }}</span></td>
+                  <td>{{ p.priority }}</td>
+                  <td>{{ p.assignments?.length || 0 }}</td>
+                  <td>
+                    <div class="progress-bar-bg" style="width:80px;">
+                      <div class="progress-bar-fill" [style.width.%]="p.completionPercent"></div>
+                    </div>
+                    <span style="font-size:11px;">{{ p.completionPercent || 0 }}%</span>
+                  </td>
+                  <td>
+                    <button class="btn" style="padding:4px 8px; font-size:12px;" (click)="openAssignModal(p)">Assign</button>
+                    <button class="btn" style="padding:4px 8px; font-size:12px; margin-left:4px;" (click)="archiveProjectItem(p)">Archive</button>
+                  </td>
+                </tr>
+                <tr *ngIf="filteredProjects.length === 0">
+                  <td colspan="9" style="text-align:center; color:var(--text-muted); padding:32px;">No projects found.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- REPORTS TAB -->
+      <!-- ======================================================= -->
+      <div *ngIf="activeTab === 'reports'" class="tab-content">
+        <div class="dashboard-card" style="margin-bottom:20px;">
+          <div style="display:flex; flex-direction:column; gap:16px; margin-bottom:20px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+              <h4 style="margin:0;">Reports & Analytics Catalog</h4>
+              
+              <!-- Report Selector -->
+              <select class="form-control" [(ngModel)]="activeReport" (change)="loadReportData()" style="width:250px; font-weight:700;">
+                <option value="employees">Employee Directory Report</option>
+                <option value="managers">Manager Capacity Overview</option>
+                <option value="departments">Department Structure Report</option>
+                <option value="teams">Team Performance Analytics</option>
+                <option value="skills">Employee Skills Matrix</option>
+                <option value="skillgaps">Skill Gap Analysis Report</option>
+                <option value="training">Training Progress Report</option>
+                <option value="certificates">Verified Credentials Report</option>
+                <option value="projects">Projects Portfolio Report</option>
+                <option value="tickets">Support Tickets Helpdesk Report</option>
+                <option value="audit">Security Audit Action Logs</option>
+                <option value="downloads">Resume Download Audit Trail</option>
+              </select>
+            </div>
+
+            <!-- Multi-Filters and Export Bar -->
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; background:var(--surface-hover); padding:16px; border-radius:8px; border:1px solid var(--border);">
+              <!-- Global Search -->
+              <div class="form-group" style="margin:0;">
+                <label style="font-size:11px; font-weight:700; margin-bottom:4px; display:block;">Search Query</label>
+                <input class="form-control" [(ngModel)]="reportSearch" (input)="filterReportRows()" placeholder="Type to filter..." style="width:100%;" />
+              </div>
+
+              <!-- Department Filter (if column exists) -->
+              <div class="form-group" style="margin:0;" *ngIf="hasReportColumn('department')">
+                <label style="font-size:11px; font-weight:700; margin-bottom:4px; display:block;">Department</label>
+                <select class="form-control" [(ngModel)]="reportDeptFilter" (change)="filterReportRows()" style="width:100%;">
+                  <option value="">All Departments</option>
+                  <option *ngFor="let d of departments" [value]="d.name">{{ d.name }}</option>
+                </select>
+              </div>
+
+              <!-- Status Filter (if column exists) -->
+              <div class="form-group" style="margin:0;" *ngIf="hasReportColumn('status') || hasReportColumn('verificationStatus')">
+                <label style="font-size:11px; font-weight:700; margin-bottom:4px; display:block;">Status</label>
+                <select class="form-control" [(ngModel)]="reportStatusFilter" (change)="filterReportRows()" style="width:100%;">
+                  <option value="">All Statuses</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                  <option value="OPEN">Open</option>
+                  <option value="ASSIGNED">Assigned</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="RESOLVED">Resolved</option>
+                  <option value="CLOSED">Closed</option>
+                  <option value="VERIFIED">Verified</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="OVERDUE">Overdue</option>
+                </select>
+              </div>
+
+              <!-- Manager Filter (if column exists) -->
+              <div class="form-group" style="margin:0;" *ngIf="hasReportColumn('manager')">
+                <label style="font-size:11px; font-weight:700; margin-bottom:4px; display:block;">Manager</label>
+                <select class="form-control" [(ngModel)]="reportManagerFilter" (change)="filterReportRows()" style="width:100%;">
+                  <option value="">All Managers</option>
+                  <option *ngFor="let emp of getUniqueManagers()" [value]="emp">{{ emp }}</option>
+                </select>
+              </div>
+
+              <!-- Page Size Selector -->
+              <div class="form-group" style="margin:0;">
+                <label style="font-size:11px; font-weight:700; margin-bottom:4px; display:block;">Page Entries</label>
+                <select class="form-control" [(ngModel)]="reportPageSize" (change)="resetReportPagination()" style="width:100%;">
+                  <option [value]="5">5 Entries</option>
+                  <option [value]="10">10 Entries</option>
+                  <option [value]="20">20 Entries</option>
+                  <option [value]="50">50 Entries</option>
+                  <option [value]="100">100 Entries</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Export Actions Toolbar -->
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+              <button class="btn btn-outline" style="padding: 6px 12px; font-size:12px;" (click)="downloadReport('csv')" [disabled]="!filteredReportRows.length">
+                <span class="material-icons" style="font-size:14px; margin-right:4px;">download</span> CSV
+              </button>
+              <button class="btn btn-outline" style="padding: 6px 12px; font-size:12px;" (click)="downloadReport('excel')" [disabled]="!filteredReportRows.length">
+                <span class="material-icons" style="font-size:14px; margin-right:4px;">grid_on</span> Excel
+              </button>
+              <button class="btn btn-outline" style="padding: 6px 12px; font-size:12px;" (click)="downloadReport('pdf')" [disabled]="!filteredReportRows.length">
+                <span class="material-icons" style="font-size:14px; margin-right:4px;">picture_as_pdf</span> PDF
+              </button>
+              <button class="btn btn-outline" style="padding: 6px 12px; font-size:12px;" (click)="downloadReport('print')" [disabled]="!filteredReportRows.length">
+                <span class="material-icons" style="font-size:14px; margin-right:4px;">print</span> Print
+              </button>
+            </div>
+          </div>
+
+          <!-- Loading Indicator -->
+          <div *ngIf="reportLoading" style="text-align:center; padding:64px 32px; color:var(--text-muted);">
+            <span class="material-icons" style="animation:spin 1s linear infinite; font-size:32px; color:var(--primary); margin-bottom:8px;">refresh</span>
+            <p>Gathering and sorting database metrics...</p>
+          </div>
+
+          <!-- Tabular Data -->
+          <div class="table-responsive" *ngIf="!reportLoading && filteredReportRows.length > 0">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th *ngFor="let col of reportColumns; let i = index" (click)="toggleReportSort(reportColumnKeys[i])" style="cursor:pointer; user-select:none;">
+                    {{ col }}
+                    <span class="material-icons sort-icon" style="font-size: 14px; vertical-align: middle; margin-left: 2px;">
+                      {{ reportSortField === reportColumnKeys[i] ? (reportSortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'swap_vert' }}
+                    </span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of paginatedReportRows">
+                  <td *ngFor="let col of reportColumnKeys">
+                    <!-- Special treatment for Skill Gap Analysis Report -->
+                    <ng-container *ngIf="activeReport === 'skillgaps'; else standardRowCell">
+                      <!-- Required Level -->
+                      <div *ngIf="col === 'requiredLevel'" style="display:flex; gap:2px;">
+                        <span *ngFor="let star of [1,2,3,4,5]" class="material-icons" style="font-size:14px;" [style.color]="row[col] >= star ? 'var(--primary)' : 'var(--border)'">star</span>
+                      </div>
+                      <!-- Current Level -->
+                      <div *ngIf="col === 'currentLevel'" style="display:flex; gap:2px;">
+                        <span *ngFor="let star of [1,2,3,4,5]" class="material-icons" style="font-size:14px;" [style.color]="row[col] >= star ? 'var(--secondary)' : 'var(--border)'">star</span>
+                      </div>
+                      <!-- Gap Level with Badge -->
+                      <span *ngIf="col === 'gap'" class="badge" [ngClass]="row[col] > 0 ? 'badge-error' : 'badge-success'" style="font-weight:700;">
+                        {{ row[col] > 0 ? '+' + row[col] : row[col] }}
+                      </span>
+                      <!-- Priority Badge -->
+                      <span *ngIf="col === 'priority'" class="badge" [ngClass]="{
+                        'badge-error': row[col] === 'CRITICAL' || row[col] === 'HIGH',
+                        'badge-warning': row[col] === 'MEDIUM',
+                        'badge-info': row[col] === 'LOW'
+                      }">{{ row[col] }}</span>
+                      <!-- Other fields -->
+                      <span *ngIf="col !== 'requiredLevel' && col !== 'currentLevel' && col !== 'gap' && col !== 'priority'">
+                        {{ row[col] !== null && row[col] !== undefined ? row[col] : '—' }}
+                      </span>
+                    </ng-container>
+                    
+                    <!-- Standard Table Cells -->
+                    <ng-template #standardRowCell>
+                      <span *ngIf="isDateValue(row[col])">{{ row[col] | date:'mediumDate' }}</span>
+                      <span *ngIf="!isDateValue(row[col])">{{ row[col] !== null && row[col] !== undefined ? row[col] : '—' }}</span>
+                    </ng-template>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- Pagination Footer -->
+            <div class="pagination-footer" style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; padding-top:10px; border-top:1px solid var(--border);">
+              <span>Showing {{ (reportCurrentPage - 1) * reportPageSize + 1 }} to {{ Math.min(reportCurrentPage * reportPageSize, filteredReportRows.length) }} of {{ filteredReportRows.length }} records</span>
+              <div class="pag-buttons" style="display:flex; gap:8px;">
+                <button class="btn btn-outline btn-sm" [disabled]="reportCurrentPage === 1" (click)="setReportPage(reportCurrentPage - 1)">Previous</button>
+                <button class="btn btn-outline btn-sm" [disabled]="reportCurrentPage === totalReportPages" (click)="setReportPage(reportCurrentPage + 1)">Next</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div *ngIf="!reportLoading && filteredReportRows.length === 0" style="text-align:center; padding:64px 32px; color:var(--text-muted);">
+            <span class="material-icons" style="font-size:48px; color:var(--text-secondary); margin-bottom:12px;">search_off</span>
+            <p>No matching report rows found. Adjust your search or filters.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- MANAGER ALLOCATION TAB -->
+      <!-- ======================================================= -->
+      <div *ngIf="activeTab === 'allocation'" class="tab-content">
+        <div class="dashboard-card">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+            <h4 style="margin:0;">Manager Capacity Dashboard</h4>
+            <button class="btn btn-primary" (click)="openModal('allocate')">
+              <span class="material-icons" style="font-size:16px;">swap_horiz</span> Re-allocate Employee
+            </button>
+          </div>
+          <div style="display:grid; gap:16px;">
+            <div *ngFor="let m of managerCapacities" style="border:1px solid var(--border); border-radius:12px; padding:20px; display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+              <div style="flex:1; min-width:200px;">
+                <strong style="font-size:15px;">{{ m.manager?.firstName }} {{ m.manager?.lastName }}</strong>
+                <p style="font-size:12px; color:var(--text-muted); margin:2px 0;">{{ m.manager?.designation?.name }} · {{ m.manager?.department?.name }}</p>
+                <p style="font-size:12px; margin:4px 0;">
+                  <span style="font-weight:700;">{{ m.currentTeamSize }}</span> / {{ m.maxCapacity }} employees
+                </p>
+              </div>
+              <div style="min-width:200px; flex:2;">
+                <div class="progress-bar-bg">
+                  <div class="progress-bar-fill" [style.width.%]="(m.currentTeamSize / m.maxCapacity) * 100" [style.background]="m.capacityStatus === 'OVER_CAPACITY' ? 'var(--error)' : m.capacityStatus === 'FULL' ? 'var(--warning)' : 'var(--success)'"></div>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted); margin-top:4px;">
+                  <span>0</span>
+                  <span style="font-weight:700;" [style.color]="m.capacityStatus === 'OVER_CAPACITY' ? 'var(--error)' : m.capacityStatus === 'FULL' ? 'var(--warning)' : 'var(--success)'">{{ m.capacityStatus }}</span>
+                  <span>{{ m.maxCapacity }}</span>
+                </div>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:6px; min-width:120px;">
+                <span style="font-size:11px; padding:3px 10px; border-radius:50px; text-align:center; font-weight:700;" [style.background]="m.capacityStatus === 'AVAILABLE' ? 'rgba(34,197,94,0.12)' : m.capacityStatus === 'FULL' ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)'" [style.color]="m.capacityStatus === 'AVAILABLE' ? 'var(--success)' : m.capacityStatus === 'FULL' ? 'var(--warning)' : 'var(--error)'">{{ m.capacityStatus }}</span>
+                <span style="font-size:11px; color:var(--text-muted); text-align:center;">Util: {{ m.utilisationPercent }}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- EMPLOYEES & TEAMS TAB -->
+      <!-- ======================================================= -->
+      <div *ngIf="activeTab === 'employees'" class="tab-content">
+        <div class="dashboard-card" style="margin-bottom:20px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+            <h4 style="margin:0;">Employees Directory ({{ filteredEmployees.length }})</h4>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+              <input class="form-control" style="width:200px;" [(ngModel)]="employeeSearchText" (input)="filterEmployeesList()" placeholder="Search staff..." />
+              <select class="form-control" [(ngModel)]="selectedDeptFilter" (change)="filterEmployeesList()" style="width:150px;">
+                <option value="">All Departments</option>
+                <option *ngFor="let d of departments" [value]="d.id">{{ d.name }}</option>
+              </select>
+              <button class="btn btn-primary" (click)="openModal('employee')">
+                <span class="material-icons" style="font-size:16px;">person_add</span> Add Employee
+              </button>
+              <button class="btn btn-outline" (click)="exportCSV()">
+                <span class="material-icons" style="font-size:16px;">download</span> Export CSV
+              </button>
+              <div style="position:relative;">
+                <button class="btn btn-outline" (click)="fileInput.click()">
+                  <span class="material-icons" style="font-size:16px;">upload</span> Import CSV
+                </button>
+                <input #fileInput type="file" (change)="onCSVFileSelected($event)" accept=".csv" style="display:none;" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Department Toggle Chips -->
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px;">
+            <button class="btn" [class.btn-primary]="selectedDeptFilter === ''" [class.btn-outline]="selectedDeptFilter !== ''" (click)="selectDeptFilter('')" style="padding:4px 12px; font-size:12px; border-radius:50px;">All</button>
+            <button *ngFor="let d of departments" class="btn" [class.btn-primary]="selectedDeptFilter === d.id" [class.btn-outline]="selectedDeptFilter !== d.id" (click)="selectDeptFilter(d.id)" style="padding:4px 12px; font-size:12px; border-radius:50px;">{{ d.code }}</button>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Department</th>
+                  <th>Designation</th>
+                  <th>Exp (Yrs)</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let emp of filteredEmployees">
+                  <td><span style="font-family:monospace; background:var(--surface-hover); padding:2px 6px; border-radius:4px; font-size:11px;">{{ emp.employeeCode }}</span></td>
+                  <td><strong>{{ emp.firstName }} {{ emp.lastName }}</strong></td>
+                  <td>{{ emp.email }}</td>
+                  <td>{{ emp.department?.name || '—' }}</td>
+                  <td>{{ emp.designation?.name || '—' }}</td>
+                  <td>{{ emp.yearsOfExperience }}</td>
+                  <td>
+                    <span style="font-size:11px; padding:3px 8px; border-radius:50px; font-weight:700;" [style.background]="emp.accountStatus === 'ACTIVE' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)'" [style.color]="emp.accountStatus === 'ACTIVE' ? 'var(--success)' : 'var(--error)'">{{ emp.accountStatus }}</span>
+                  </td>
+                  <td>
+                    <button class="btn btn-outline" style="padding:4px 8px; font-size:12px;" (click)="toggleEmployee(emp)">
+                      {{ emp.accountStatus === 'ACTIVE' ? 'Deactivate' : 'Activate' }}
+                    </button>
+                    <button class="btn btn-primary" style="padding:4px 8px; font-size:12px; margin-left:4px;" (click)="viewEmployeeResume(emp)">
+                      View Resume
+                    </button>
+                  </td>
+                </tr>
+                <tr *ngIf="filteredEmployees.length === 0">
+                  <td colspan="8" style="text-align:center; color:var(--text-muted); padding:32px;">No employees found.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- SKILL CATALOG TAB -->
+      <!-- ======================================================= -->
+      <div *ngIf="activeTab === 'skills'" class="tab-content">
+        <div style="display:grid; grid-template-columns: 2fr 1fr; gap:20px;">
+          <!-- Catalog List -->
+          <div class="dashboard-card">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+              <h4 style="margin:0;">Skill Catalog ({{ filteredSkills.length }})</h4>
+              <div style="display:flex; gap:10px;">
+                <input class="form-control" style="width:180px;" [(ngModel)]="skillSearchText" (input)="filterSkillsList()" placeholder="Search skills..." />
+                <select class="form-control" [(ngModel)]="selectedSkillCatFilter" (change)="filterSkillsList()" style="width:140px;">
+                  <option value="">All Categories</option>
+                  <option *ngFor="let c of categories" [value]="c.id">{{ c.name }}</option>
+                </select>
+                <button class="btn btn-primary" (click)="openModal('skill')">
+                  <span class="material-icons" style="font-size:16px;">add</span> Add Skill
+                </button>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Type</th>
+                    <th>Required Level</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let sk of filteredSkills">
+                    <td><span style="font-family:monospace; background:var(--surface-hover); padding:2px 6px; border-radius:4px; font-size:11px;">{{ sk.skillCode }}</span></td>
+                    <td><strong>{{ sk.skillName }}</strong></td>
+                    <td>{{ sk.category?.name || '—' }}</td>
+                    <td><span class="badge badge-info">{{ sk.skillType }}</span></td>
+                    <td>Lvl {{ sk.defaultRequiredLevel }}</td>
+                  </tr>
+                  <tr *ngIf="filteredSkills.length === 0">
+                    <td colspan="5" style="text-align:center; color:var(--text-muted); padding:32px;">No skills found.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Suggestion Requests -->
+          <div class="dashboard-card">
+            <h4>Suggested Skill Requests ({{ skillSuggestions.length }})</h4>
+            <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">Requests submitted by employees for new skill entries.</p>
+            <div style="display:flex; flex-direction:column; gap:12px; max-height: 500px; overflow-y: auto; padding-right:4px;">
+              <div *ngFor="let sug of skillSuggestions" style="border:1px solid var(--border); border-radius:8px; padding:12px; background:var(--surface-hover);">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+                  <strong style="font-size:13px; color:var(--text-primary);">{{ sug.subject.replace('Suggested Skill Request:', '') }}</strong>
+                  <span class="badge" [class.badge-info]="sug.status === 'OPEN'" [class.badge-success]="sug.status === 'RESOLVED'">{{ sug.status }}</span>
+                </div>
+                <p style="font-size:11px; color:var(--text-muted); margin:4px 0;">Reason: {{ sug.description?.split('|')[3] || sug.description }}</p>
+                <p style="font-size:11px; color:var(--text-muted); margin:2px 0;">By: {{ sug.employee?.firstName }} {{ sug.employee?.lastName }} ({{ sug.employee?.employeeCode }})</p>
+                <div style="display:flex; gap:8px; margin-top:12px;" *ngIf="sug.status === 'OPEN'">
+                  <button class="btn btn-primary" style="padding:4px 10px; font-size:11px;" (click)="approveSkillSuggestion(sug)">Approve</button>
+                  <button class="btn btn-outline" style="padding:4px 10px; font-size:11px;" (click)="rejectSkillSuggestion(sug)">Reject</button>
+                </div>
+              </div>
+              <div *ngIf="skillSuggestions.length === 0" style="text-align:center; color:var(--text-muted); padding:32px 0; font-size:13px;">No suggestions requests pending.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- TRAINING & CERTIFICATES TAB -->
+      <!-- ======================================================= -->
+      <div *ngIf="activeTab === 'training'" class="tab-content">
+        <div style="display:grid; grid-template-columns: 3fr 2fr; gap:20px;">
+          <!-- Allocations -->
+          <div class="dashboard-card">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+              <h4 style="margin:0;">Active Training Plans ({{ filteredTrainingPlans.length }})</h4>
+              <div style="display:flex; gap:10px;">
+                <input class="form-control" style="width:200px;" [(ngModel)]="trainingSearchText" (input)="filterTrainingList()" placeholder="Search programs..." />
+                <button class="btn btn-primary" (click)="openModal('training')">
+                  <span class="material-icons" style="font-size:16px;">assignment_ind</span> Assign Training
+                </button>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>Title</th>
+                    <th>Employee</th>
+                    <th>Progress</th>
+                    <th>Due Date</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let tp of filteredTrainingPlans">
+                    <td><span style="font-family:monospace; background:var(--surface-hover); padding:2px 6px; border-radius:4px; font-size:11px;">{{ tp.trainingCode }}</span></td>
+                    <td><strong>{{ tp.trainingTitle }}</strong></td>
+                    <td>{{ tp.employee?.firstName }} {{ tp.employee?.lastName }}</td>
+                    <td>
+                      <div class="progress-bar-bg" style="width:70px; margin-bottom:4px;">
+                        <div class="progress-bar-fill" [style.width.%]="tp.progress"></div>
+                      </div>
+                      <span style="font-size:10px; color:var(--text-secondary);">{{ tp.progress }}%</span>
+                    </td>
+                    <td>{{ tp.dueDate | date:'shortDate' }}</td>
+                    <td>
+                      <span style="font-size:10px; padding:3px 8px; border-radius:50px; font-weight:700;" [style.background]="tp.status === 'VERIFIED' ? 'rgba(34,197,94,0.12)' : tp.status === 'OVERDUE' ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.12)'" [style.color]="tp.status === 'VERIFIED' ? 'var(--success)' : tp.status === 'OVERDUE' ? 'var(--error)' : 'var(--warning)'">{{ tp.status }}</span>
+                    </td>
+                  </tr>
+                  <tr *ngIf="filteredTrainingPlans.length === 0">
+                    <td colspan="6" style="text-align:center; color:var(--text-muted); padding:32px;">No training plans assigned.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Certificates -->
+          <div class="dashboard-card">
+            <h4>Certifications Verification ({{ certificatesList.length }})</h4>
+            <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">Approve or reject credentials uploaded by employee staff.</p>
+            <div style="display:flex; flex-direction:column; gap:12px; max-height:550px; overflow-y:auto; padding-right:4px;">
+              <div *ngFor="let cert of certificatesList" style="border:1px solid var(--border); border-radius:8px; padding:12px; background:var(--surface-hover);">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+                  <strong style="font-size:13px; color:var(--text-primary);">{{ cert.certificateName }}</strong>
+                  <span class="badge" [class.badge-success]="cert.verificationStatus === 'VERIFIED'" [class.badge-info]="cert.verificationStatus === 'PENDING'" [class.badge-error]="cert.verificationStatus === 'REJECTED'">{{ cert.verificationStatus }}</span>
+                </div>
+                <p style="font-size:11px; color:var(--text-secondary); margin:2px 0;">Org: {{ cert.issuingOrganization }}</p>
+                <p style="font-size:11px; color:var(--text-secondary); margin:2px 0;">By: {{ cert.employee?.firstName }} {{ cert.employee?.lastName }} ({{ cert.employee?.employeeCode }})</p>
+                <p style="font-size:11px; margin:4px 0;"><a [href]="'http://localhost:5000/' + cert.filePath" target="_blank" style="display:flex; align-items:center; gap:4px; color:var(--primary); font-weight:600;"><span class="material-icons" style="font-size:14px;">cloud_download</span> Download Attachment</a></p>
+                <div style="display:flex; gap:8px; margin-top:12px;" *ngIf="cert.verificationStatus === 'PENDING'">
+                  <button class="btn btn-primary" style="padding:4px 10px; font-size:11px;" (click)="verifyCertificate(cert, 'VERIFIED')">Verify & Approve</button>
+                  <button class="btn btn-outline" style="padding:4px 10px; font-size:11px;" (click)="verifyCertificate(cert, 'REJECTED')">Reject</button>
+                </div>
+              </div>
+              <div *ngIf="certificatesList.length === 0" style="text-align:center; color:var(--text-muted); padding:32px 0; font-size:13px;">No certifications uploaded.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- SUPPORT TICKETS TAB -->
+      <!-- ======================================================= -->
+      <div *ngIf="activeTab === 'tickets'" class="tab-content">
+        <div style="display:grid; grid-template-columns: 2fr 3fr; gap:20px;">
+          <!-- Tickets List -->
+          <div class="dashboard-card">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+              <h4 style="margin:0;">Support Helpdesk ({{ filteredTicketsList.length }})</h4>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <input class="form-control" style="width:160px;" [(ngModel)]="ticketSearchText" (input)="filterTicketsList()" placeholder="Search tix..." />
+                <select class="form-control" [(ngModel)]="ticketStatusFilter" (change)="filterTicketsList()" style="width:120px;">
+                  <option value="">All Statuses</option>
+                  <option value="OPEN">Open</option>
+                  <option value="ASSIGNED">Assigned</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="WAITING_USER">Waiting User</option>
+                  <option value="RESOLVED">Resolved</option>
+                  <option value="CLOSED">Closed</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:10px; max-height:600px; overflow-y:auto; padding-right:4px;">
+              <div *ngFor="let t of filteredTicketsList" class="ticket-item-card" [class.active]="selectedTicket?.id === t.id" (click)="selectTicket(t)" style="border:1px solid var(--border); border-radius:10px; padding:15px; cursor:pointer; background:var(--surface-card); transition:var(--transition);">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+                  <span style="font-family:monospace; font-size:11px; background:var(--surface-hover); padding:2px 6px; border-radius:4px; font-weight:700;">{{ t.ticketNumber }}</span>
+                  <span class="badge" [class.badge-error]="t.priority === 'CRITICAL' || t.priority === 'HIGH'" [class.badge-info]="t.priority === 'MEDIUM'" [class.badge-primary]="t.priority === 'LOW'">{{ t.priority }}</span>
+                </div>
+                <strong style="font-size:13px; display:block; margin:6px 0; color:var(--text-primary);">{{ t.subject }}</strong>
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--text-muted); margin-top:8px;">
+                  <span>Category: {{ t.category }}</span>
+                  <span class="badge" [class.badge-success]="t.status === 'RESOLVED' || t.status === 'CLOSED'" [class.badge-info]="t.status === 'ASSIGNED' || t.status === 'IN_PROGRESS'" [class.badge-warning]="t.status === 'OPEN'">{{ t.status }}</span>
+                </div>
+              </div>
+              <div *ngIf="filteredTicketsList.length === 0" style="text-align:center; color:var(--text-muted); padding:32px;">No support tickets found.</div>
+            </div>
+          </div>
+
+          <!-- Ticket Conversation Detail -->
+          <div class="dashboard-card" style="display:flex; flex-direction:column;">
+            <div *ngIf="!selectedTicket" style="text-align:center; color:var(--text-muted); padding:64px 20px; flex:1;">
+              <span class="material-icons" style="font-size:48px; color:var(--text-secondary); margin-bottom:12px;">chat_bubble_outline</span>
+              <p style="margin:0;">Select a ticket from the left panel to open details, timeline, and view or add replies.</p>
+            </div>
+
+            <div *ngIf="selectedTicket" style="display:flex; flex-direction:column; flex:1;">
+              <!-- Ticket Header Info -->
+              <div style="border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
+                  <div>
+                    <h4 style="margin:0; font-size:16px;">{{ selectedTicket.subject }}</h4>
+                    <p style="font-size:12px; color:var(--text-muted); margin:4px 0;">Number: {{ selectedTicket.ticketNumber }} | Category: {{ selectedTicket.category }} | Priority: {{ selectedTicket.priority }}</p>
+                    <p style="font-size:12px; color:var(--text-muted); margin:2px 0;">
+                      Raised By: 
+                      <span *ngIf="selectedTicket.employee">Employee - {{ selectedTicket.employee.firstName }} {{ selectedTicket.employee.lastName }} ({{ selectedTicket.employee.employeeCode }})</span>
+                      <span *ngIf="selectedTicket.manager">Manager - {{ selectedTicket.manager.firstName }} {{ selectedTicket.manager.lastName }} ({{ selectedTicket.manager.employeeCode }})</span>
+                    </p>
+                  </div>
+                  <div style="text-align:right;">
+                    <span class="badge" [class.badge-success]="selectedTicket.status === 'CLOSED'" [class.badge-info]="selectedTicket.status === 'RESOLVED' || selectedTicket.status === 'IN_PROGRESS'" [class.badge-warning]="selectedTicket.status === 'OPEN'">Status: {{ selectedTicket.status }}</span>
+                    <p style="font-size:10px; color:var(--text-muted); margin:6px 0 0 0;" *ngIf="selectedTicket.slaStatus === 'BREACHED'" class="text-error">SLA BREACHED</p>
+                    <p style="font-size:10px; color:var(--text-muted); margin:4px 0 0 0;" *ngIf="selectedTicket.assignedAdminId">Assigned: Admin ID {{ selectedTicket.assignedAdminId.substring(0,8) }}</p>
+                    <button *ngIf="!selectedTicket.assignedAdminId" class="btn btn-outline" style="padding:4px 10px; font-size:11px; margin-top:8px;" (click)="assignTicketToMe(selectedTicket)">Assign to Me</button>
+                  </div>
+                </div>
+                <div style="background:var(--surface-hover); border-radius:8px; padding:12px; margin-top:12px; font-size:12.5px; color:var(--text-primary); border-left:4px solid var(--primary);">
+                  <strong>Description:</strong> {{ selectedTicket.description }}
+                </div>
+              </div>
+
+              <!-- Timeline Thread -->
+              <div style="flex:1; max-height:300px; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding-right:4px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:20px;">
+                <div *ngFor="let comment of selectedTicket.comments" style="border-radius:10px; padding:12px; max-width:80%;" [style.align-self]="comment.senderRole === 'ADMIN' ? 'flex-end' : 'flex-start'" [style.background]="comment.isInternalNote ? 'rgba(245,158,11,0.08)' : comment.senderRole === 'ADMIN' ? 'rgba(94,114,228,0.08)' : 'var(--surface-hover)'" [style.border]="comment.isInternalNote ? '1px dashed var(--warning)' : '1px solid var(--border)'">
+                  <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-muted); margin-bottom:4px; gap:8px;">
+                    <span style="font-weight:700;">{{ comment.senderRole }} <span *ngIf="comment.isInternalNote" style="color:var(--warning); font-weight:700;">(INTERNAL NOTE)</span></span>
+                    <span>{{ comment.createdAt | date:'short' }}</span>
+                  </div>
+                  <p style="font-size:12px; margin:0; line-height:1.4; white-space:pre-line;">{{ comment.message }}</p>
+                  <div *ngFor="let att of comment.attachments" style="margin-top:6px; font-size:11px;">
+                    <a [href]="'http://localhost:5000/' + att.filePath" target="_blank" style="color:var(--primary); font-weight:600;"><span class="material-icons" style="font-size:12px;">attachment</span> {{ att.originalFileName }} ({{ (att.fileSize/1024) | number:'1.0-0' }} KB)</a>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Actions Panel: Reply, Internal Note, Resolve -->
+              <div style="display:flex; flex-direction:column; gap:12px;" *ngIf="selectedTicket.status !== 'CLOSED'">
+                <!-- Resolve Form -->
+                <div style="display:flex; gap:10px; margin-bottom:10px; align-items:flex-end; border-top:1px solid var(--border); padding-top:15px;" *ngIf="selectedTicket.status !== 'RESOLVED'">
+                  <div style="flex:1;">
+                    <label style="font-size:11px; font-weight:700; margin-bottom:4px; display:block;">Resolve Ticket</label>
+                    <textarea class="form-control" style="height:38px; resize:none;" [(ngModel)]="resolutionText" placeholder="Enter resolution details..."></textarea>
+                  </div>
+                  <button class="btn btn-primary" (click)="submitTicketResolution()" [disabled]="!resolutionText" style="height:38px; padding:0 16px;">Resolve</button>
+                </div>
+
+                <!-- Reply Form -->
+                <div class="form-group">
+                  <label style="font-size:11px; font-weight:700; margin-bottom:4px; display:block;">Post Comment / Update Thread</label>
+                  <textarea class="form-control" style="height:60px;" [(ngModel)]="newReplyMessage" placeholder="Type message..."></textarea>
+                </div>
+                
+                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+                  <div style="display:flex; gap:12px; align-items:center;">
+                    <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+                      <input type="checkbox" [(ngModel)]="replyIsInternal" /> Internal Note (Hidden from sender)
+                    </label>
+                    <input type="file" (change)="onReplyFileSelected($event)" style="display:none;" #replyFileInput />
+                    <button class="btn btn-outline" style="padding:4px 10px; font-size:11px;" (click)="replyFileInput.click()">
+                      <span class="material-icons" style="font-size:14px; margin-right:4px;">attach_file</span>
+                      {{ replyFile ? replyFile.name.substring(0,12) + '...' : 'Add Attachment' }}
+                    </button>
+                  </div>
+                  <button class="btn btn-secondary" [disabled]="!newReplyMessage && !replyFile" (click)="postReply()">Submit Message</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- AUDIT & ERROR LOGS TAB -->
+      <!-- ======================================================= -->
+      <div *ngIf="activeTab === 'logs'" class="tab-content">
+        <div class="dashboard-card" style="margin-bottom:20px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+            <h4 style="margin:0;">System Logs Monitor</h4>
+            <input class="form-control" style="width:250px;" [(ngModel)]="logsSearchText" (input)="filterLogsList()" placeholder="Filter logs..." />
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+            <!-- Audit Logs -->
+            <div>
+              <h5 style="margin-bottom:12px;">Security Audit Logs ({{ filteredAuditLogs.length }})</h5>
+              <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Action</th>
+                      <th>Component</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let a of filteredAuditLogs">
+                      <td>{{ a.user?.email || 'SYSTEM' }}</td>
+                      <td><span class="badge badge-info">{{ a.action }}</span></td>
+                      <td>{{ a.component }}</td>
+                      <td>{{ a.createdAt | date:'short' }}</td>
+                    </tr>
+                    <tr *ngIf="filteredAuditLogs.length === 0">
+                      <td colspan="4" style="text-align:center; color:var(--text-muted); padding:32px;">No audit records.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Error Logs -->
+            <div>
+              <h5 style="margin-bottom:12px;">Runtime Exception Logs ({{ filteredErrorLogs.length }})</h5>
+              <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Endpoint</th>
+                      <th>Method</th>
+                      <th>Message</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let err of filteredErrorLogs">
+                      <td><span style="font-family:monospace; font-size:11px; background:var(--surface-hover); padding:2px 6px; border-radius:4px;">{{ err.endpoint }}</span></td>
+                      <td><strong>{{ err.method }}</strong></td>
+                      <td class="text-error" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" [title]="err.errorMessage">{{ err.errorMessage }}</td>
+                      <td>{{ err.createdAt | date:'short' }}</td>
+                    </tr>
+                    <tr *ngIf="filteredErrorLogs.length === 0">
+                      <td colspan="4" style="text-align:center; color:var(--text-muted); padding:32px;">No error logs.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- MY PROFILE TAB -->
+      <!-- ======================================================= -->
+      <div *ngIf="activeTab === 'profile'" class="tab-content">
+        <div class="dashboard-card" style="max-width:600px; margin:0 auto; padding:32px; border-radius:12px;">
+          <div style="text-align:center; margin-bottom:28px;">
+            <div style="width:100px; height:100px; border-radius:50%; background:linear-gradient(135deg, var(--primary), var(--primary-dark)); display:flex; align-items:center; justify-content:center; font-size:42px; font-weight:800; color:#fff; margin:0 auto 16px; box-shadow:0 8px 16px rgba(0,0,0,0.1);">
+              {{ currentUser?.firstName ? currentUser.firstName[0] : 'A' }}
+            </div>
+            <h3 style="margin:0 0 4px; font-size:24px;">{{ currentUser?.firstName }} {{ currentUser?.lastName }}</h3>
+            <p style="margin:0; color:var(--primary); font-weight:600; font-size:14px; text-transform:uppercase; letter-spacing:1px;">{{ currentUser?.role }}</p>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:20px; border-top:1px solid var(--border); padding-top:24px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:12px; border-bottom:1px solid rgba(0,0,0,0.02);">
+              <span style="font-weight:600; color:var(--text-secondary);">Employee Code</span>
+              <span style="font-family:monospace; background:var(--surface-hover); padding:2px 8px; border-radius:4px; font-weight:600;">{{ currentUser?.employeeId || 'N/A' }}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:12px; border-bottom:1px solid rgba(0,0,0,0.02);">
+              <span style="font-weight:600; color:var(--text-secondary);">Email Address</span>
+              <span style="color:var(--text-muted);">{{ currentUser?.email }}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:12px; border-bottom:1px solid rgba(0,0,0,0.02);">
+              <span style="font-weight:600; color:var(--text-secondary);">Access Level</span>
+              <span class="badge badge-success">{{ currentUser?.role }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. Forms Modals Overlay (kept for original CRUD + new modals) -->
       <div *ngIf="activeModal !== null" class="modal-overlay">
         <div class="modal-content">
           <div class="modal-header">
@@ -212,7 +939,7 @@ import { Subscription } from "rxjs";
                 <select class="form-control" formControlName="role">
                   <option value="EMPLOYEE">Employee</option>
                   <option value="MANAGER">Manager</option>
-                  <option value="ADMIN_SUPPORT">Support Admin</option>
+                  <option value="ADMIN">System Administrator</option>
                 </select>
               </div>
 
@@ -314,172 +1041,265 @@ import { Subscription } from "rxjs";
               <div *ngIf="actionError" class="error-banner">{{ actionError }}</div>
               <button type="submit" class="btn btn-primary w-full">Assign Training</button>
             </form>
-          </div>
-        </div>
-      </div>
-      </ng-container>
 
-      <!-- ======================================================= -->
-      <!-- PROJECTS TAB -->
-      <!-- ======================================================= -->
-      <div *ngIf="activeTab === 'projects'" class="tab-content">
-        <div class="dashboard-card" style="margin-bottom:20px;">
-          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
-            <h4 style="margin:0;">Projects ({{ projects.length }})</h4>
-            <div style="display:flex; gap:10px; flex-wrap:wrap;">
-              <input class="form-control" style="width:220px;" [(ngModel)]="projectSearch" (input)="filterProjects()" placeholder="Search projects..." />
-              <select class="form-control" [(ngModel)]="projectStatusFilter" (change)="filterProjects()" style="width:150px;">
-                <option value="">All Statuses</option>
-                <option value="PLANNING">Planning</option>
-                <option value="ACTIVE">Active</option>
-                <option value="ON_HOLD">On Hold</option>
-                <option value="COMPLETED">Completed</option>
-                <option value="ARCHIVED">Archived</option>
-              </select>
-              <button class="btn btn-primary" (click)="openModal('project')">
-                <span class="material-icons" style="font-size:16px;">add</span> New Project
-              </button>
+            <!-- Create Project Form -->
+            <form *ngIf="activeModal === 'project'" [formGroup]="projectForm" (ngSubmit)="onSaveProject()">
+              <div class="form-group">
+                <label>Project Code</label>
+                <input type="text" class="form-control" formControlName="projectCode" placeholder="PRJ-001" />
+              </div>
+              <div class="form-group">
+                <label>Project Name</label>
+                <input type="text" class="form-control" formControlName="name" />
+              </div>
+              <div class="form-group">
+                <label>Client Name</label>
+                <input type="text" class="form-control" formControlName="clientName" />
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Start Date</label>
+                  <input type="date" class="form-control" formControlName="startDate" />
+                </div>
+                <div class="form-group">
+                  <label>Status</label>
+                  <select class="form-control" formControlName="status">
+                    <option value="PLANNING">Planning</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="ON_HOLD">On Hold</option>
+                    <option value="COMPLETED">Completed</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Priority</label>
+                  <select class="form-control" formControlName="priority">
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                    <option value="CRITICAL">Critical</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Technologies</label>
+                  <input type="text" class="form-control" formControlName="technologies" placeholder="e.g. Angular, Node.js" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Description</label>
+                <textarea class="form-control" formControlName="description"></textarea>
+              </div>
+              <div *ngIf="actionError" class="error-banner">{{ actionError }}</div>
+              <button type="submit" class="btn btn-primary w-full">Create Project</button>
+            </form>
+
+            <!-- Project Assignment Form -->
+            <div *ngIf="activeModal === 'projectAssign'">
+              <p style="margin-bottom:12px; color:var(--text-muted);">Assign employee to <strong>{{ selectedProjectForAssign?.name }}</strong></p>
+              <div class="form-group">
+                <label>Select Employee</label>
+                <select class="form-control" [(ngModel)]="assignEmployeeId">
+                  <option value="" disabled>-- Choose Employee --</option>
+                  <option *ngFor="let emp of employeesList" [value]="emp.id">
+                    {{ emp.employeeCode }} - {{ emp.firstName }} {{ emp.lastName }}
+                  </option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Project Role</label>
+                <select class="form-control" [(ngModel)]="assignRole">
+                  <option value="Developer">Developer</option>
+                  <option value="QA Engineer">QA Engineer</option>
+                  <option value="Database Engineer">Database Engineer</option>
+                  <option value="Business Analyst">Business Analyst</option>
+                  <option value="Architect">Architect</option>
+                  <option value="Project Manager">Project Manager</option>
+                </select>
+              </div>
+              <div *ngIf="actionError" class="error-banner">{{ actionError }}</div>
+              <button class="btn btn-primary w-full" (click)="confirmAssignEmployee()">Confirm Assignment</button>
             </div>
-          </div>
-          <div class="table-responsive">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>Code</th>
-                  <th>Name</th>
-                  <th>Client</th>
-                  <th>Manager</th>
-                  <th>Status</th>
-                  <th>Priority</th>
-                  <th>Team</th>
-                  <th>Completion</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let p of filteredProjects">
-                  <td><span style="font-size:11px; font-family:monospace; background:var(--surface-hover); padding:2px 6px; border-radius:4px;">{{ p.projectCode }}</span></td>
-                  <td><strong>{{ p.name }}</strong></td>
-                  <td>{{ p.clientName || '—' }}</td>
-                  <td>{{ p.manager ? p.manager.firstName + ' ' + p.manager.lastName : '—' }}</td>
-                  <td><span class="badge badge-info">{{ p.status }}</span></td>
-                  <td>{{ p.priority }}</td>
-                  <td>{{ p.assignments?.length || 0 }}</td>
-                  <td>
-                    <div class="progress-bar-bg" style="width:80px;">
-                      <div class="progress-bar-fill" [style.width.%]="p.completionPercent"></div>
+
+            <!-- Resume Preview modal -->
+            <div *ngIf="activeModal === 'resumePreview'" class="resume-modal-body" style="max-height:80vh; overflow-y:auto; padding:10px;">
+              <div *ngIf="resumePreviewData; else loadingResume" style="display:flex; flex-direction:column; gap:24px;">
+                <!-- Template Selection & Action toolbar -->
+                <div style="background:var(--surface-hover); border:1px solid var(--border); border-radius:10px; padding:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <label style="font-weight:600; font-size:13px; color:var(--text-secondary);">Template:</label>
+                    <select class="form-control" [(ngModel)]="resumeSettings.resumeTemplate" style="width:140px; padding:4px 8px;">
+                      <option value="minimalist">Minimalist</option>
+                      <option value="modern">Modern</option>
+                      <option value="classic">Classic</option>
+                      <option value="executive">Executive</option>
+                    </select>
+                    <label style="display:flex; align-items:center; gap:4px; font-size:12px; cursor:pointer; margin-left:8px;">
+                      <input type="checkbox" [(ngModel)]="resumeSettings.resumeHideContact" /> Hide contact
+                    </label>
+                    <label style="display:flex; align-items:center; gap:4px; font-size:12px; cursor:pointer;">
+                      <input type="checkbox" [(ngModel)]="resumeSettings.resumeHideRatings" /> Hide ratings
+                    </label>
+                  </div>
+                  <div style="display:flex; gap:8px;">
+                    <button class="btn btn-primary btn-sm" (click)="downloadMemberResumePDF()">
+                      <span class="material-icons" style="font-size:14px; margin-right:4px;">picture_as_pdf</span> PDF
+                    </button>
+                    <button class="btn btn-outline-sm" (click)="printMemberResume()">
+                      <span class="material-icons" style="font-size:14px; margin-right:4px;">print</span> Print
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Printable Resume Area -->
+                <div class="resume-preview-card" [ngClass]="resumeSettings.resumeTemplate" id="resumePreviewWindow" style="background:#fff; border:1px solid var(--border); padding:32px; border-radius:8px; color:#1e293b;">
+                  <!-- Modern style (2 column) -->
+                  <div *ngIf="resumeSettings.resumeTemplate === 'modern'" style="display: grid; grid-template-columns: 240px 1fr; gap: 24px; margin: -32px; border-radius: 8px; overflow: hidden; min-height: 800px; text-align: left;">
+                    <div style="background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%); color: #ffffff; padding: 32px 20px; display: flex; flex-direction: column; gap: 20px;">
+                      <div style="text-align: center;">
+                        <div *ngIf="resumePreviewData.employee.profileImage" style="margin-bottom:12px;">
+                          <img [src]="resumePreviewData.employee.profileImage" style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:3px solid var(--primary);" alt="Profile" />
+                        </div>
+                        <h3 style="color:#fff; margin:0 0 4px; font-size:18px;">{{ resumePreviewData.employee.firstName }} {{ resumePreviewData.employee.lastName }}</h3>
+                        <p style="color:#a5b4fc; margin:0; font-size:12px; font-weight:600;">{{ resumePreviewData.employee.designation }}</p>
+                      </div>
+
+                      <div *ngIf="!resumeSettings.resumeHideContact" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px;">
+                        <h5 style="color:#818cf8; text-transform:uppercase; font-size:10px; letter-spacing:1px; margin:0 0 8px;">Contact</h5>
+                        <div style="font-size:11px; color:#cbd5e1; display:flex; flex-direction:column; gap:6px;">
+                          <div>{{ resumePreviewData.employee.email }}</div>
+                          <div *ngIf="resumePreviewData.employee.phone">{{ resumePreviewData.employee.phone }}</div>
+                          <div>{{ resumePreviewData.employee.workLocation }}</div>
+                        </div>
+                      </div>
                     </div>
-                    <span style="font-size:11px;">{{ p.completionPercent || 0 }}%</span>
-                  </td>
-                  <td>
-                    <button class="btn" style="padding:4px 8px; font-size:12px;" (click)="openAssignModal(p)">Assign</button>
-                    <button class="btn" style="padding:4px 8px; font-size:12px; margin-left:4px;" (click)="archiveProjectItem(p)">Archive</button>
-                  </td>
-                </tr>
-                <tr *ngIf="filteredProjects.length === 0">
-                  <td colspan="9" style="text-align:center; color:var(--text-muted); padding:32px;">No projects found.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
 
-      <!-- ======================================================= -->
-      <!-- REPORTS TAB -->
-      <!-- ======================================================= -->
-      <div *ngIf="activeTab === 'reports'" class="tab-content">
-        <div class="dashboard-card" style="margin-bottom:20px;">
-          <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
-            <h4 style="margin:0;">Reports & Analytics</h4>
-            <div style="margin-left:auto; display:flex; gap:10px;">
-              <select class="form-control" [(ngModel)]="activeReport" (change)="loadReportData()" style="width:200px;">
-                <option value="employees">Employees</option>
-                <option value="managers">Manager Capacities</option>
-                <option value="projects">Projects</option>
-                <option value="training">Training Plans</option>
-                <option value="skills">Skills</option>
-                <option value="certificates">Certificates</option>
-                <option value="tickets">Support Tickets</option>
-                <option value="downloads">Resume Downloads</option>
-              </select>
-              <input class="form-control" [(ngModel)]="reportSearch" (input)="filterReportRows()" placeholder="Search..." style="width:200px;" />
-              <button class="btn btn-outline" (click)="exportReportCSV()">
-                <span class="material-icons" style="font-size:16px;">download</span> Export CSV
-              </button>
-            </div>
-          </div>
-          <div *ngIf="reportLoading" style="text-align:center; padding:32px; color:var(--text-muted);">Loading report...</div>
-          <div class="table-responsive" *ngIf="!reportLoading && filteredReportRows.length > 0">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th *ngFor="let col of reportColumns">{{ col }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let row of filteredReportRows | slice:0:reportPageSize">
-                  <td *ngFor="let col of reportColumnKeys">{{ row[col] ? (row[col] | date:'shortDate') : '—' }}</td>
-                </tr>
-              </tbody>
-            </table>
-            <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Showing {{ Math.min(reportPageSize, filteredReportRows.length) }} of {{ filteredReportRows.length }} records.</p>
-          </div>
-          <div *ngIf="!reportLoading && filteredReportRows.length === 0" style="text-align:center; padding:32px; color:var(--text-muted);">No records found for this report.</div>
-        </div>
-      </div>
+                    <div style="padding: 32px 24px; display:flex; flex-direction:column; gap:20px;">
+                      <!-- Professional Summary -->
+                      <div *ngIf="resumePreviewData.employee.autoSummary">
+                        <h4 style="margin:0 0 8px; color:var(--primary); text-transform:uppercase; font-size:11px; border-bottom:2px solid var(--primary); padding-bottom:4px;">Professional Summary</h4>
+                        <p style="font-size:12px; color:#475569; line-height:1.6; font-style:italic;">{{ resumePreviewData.employee.autoSummary }}</p>
+                      </div>
+                      
+                      <!-- Education -->
+                      <div *ngIf="resumePreviewData.employee.education">
+                        <h4 style="margin:0 0 8px; color:var(--primary); text-transform:uppercase; font-size:11px; border-bottom:2px solid var(--primary); padding-bottom:4px;">Education</h4>
+                        <p style="font-size:12px; color:#475569;">{{ resumePreviewData.employee.education }}</p>
+                      </div>
 
-      <!-- ======================================================= -->
-      <!-- MANAGER ALLOCATION TAB -->
-      <!-- ======================================================= -->
-      <div *ngIf="activeTab === 'allocation'" class="tab-content">
-        <div class="dashboard-card">
-          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
-            <h4 style="margin:0;">Manager Capacity Dashboard</h4>
-            <button class="btn btn-primary" (click)="openModal('allocate')">
-              <span class="material-icons" style="font-size:16px;">swap_horiz</span> Re-allocate Employee
-            </button>
-          </div>
-          <div style="display:grid; gap:16px;">
-            <div *ngFor="let m of managerCapacities" style="border:1px solid var(--border); border-radius:12px; padding:20px; display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
-              <div style="flex:1; min-width:200px;">
-                <strong style="font-size:15px;">{{ m.manager?.firstName }} {{ m.manager?.lastName }}</strong>
-                <p style="font-size:12px; color:var(--text-muted); margin:2px 0;">{{ m.manager?.designation?.name }} · {{ m.manager?.department?.name }}</p>
-                <p style="font-size:12px; margin:4px 0;">
-                  <span style="font-weight:700;">{{ m.currentTeamSize }}</span> / {{ m.maxCapacity }} employees
-                </p>
-              </div>
-              <div style="min-width:200px; flex:2;">
-                <div class="progress-bar-bg">
-                  <div class="progress-bar-fill" [style.width.%]="(m.currentTeamSize / m.maxCapacity) * 100" [style.background]="m.capacityStatus === 'OVER_CAPACITY' ? 'var(--error)' : m.capacityStatus === 'FULL' ? 'var(--warning)' : 'var(--success)'"></div>
+                      <!-- Skills -->
+                      <div *ngIf="resumePreviewData.skills?.length">
+                        <h4 style="margin:0 0 8px; color:var(--primary); text-transform:uppercase; font-size:11px; border-bottom:2px solid var(--primary); padding-bottom:4px;">Skills</h4>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:6px;">
+                          <div *ngFor="let s of resumePreviewData.skills" style="font-size:11px; font-weight:600; background:#f1f5f9; padding:4px 8px; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">
+                            <span>{{ s.name }}</span>
+                            <span *ngIf="!resumeSettings.resumeHideRatings" style="color:var(--primary);">★{{ s.finalRating || s.selfRating }}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Projects -->
+                      <div *ngIf="resumePreviewData.projects?.length">
+                        <h4 style="margin:0 0 8px; color:var(--primary); text-transform:uppercase; font-size:11px; border-bottom:2px solid var(--primary); padding-bottom:4px;">Projects</h4>
+                        <div *ngFor="let p of resumePreviewData.projects" style="font-size:12px; margin-bottom:8px;">
+                          <strong>{{ p.name }}</strong> ({{ p.role }})
+                          <p style="font-size:11px; color:#64748b; margin:2px 0 0;">{{ p.responsibilities }}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Standard Styles (Minimalist, Classic, Executive) -->
+                  <div *ngIf="resumeSettings.resumeTemplate !== 'modern'" style="text-align: left;">
+                    <div style="display:flex; justify-content:space-between; border-bottom:2px solid var(--primary); padding-bottom:16px; margin-bottom:16px;">
+                      <div>
+                        <h2 style="margin:0; font-size:22px; color:#0f172a;">{{ resumePreviewData.employee.firstName }} {{ resumePreviewData.employee.lastName }}</h2>
+                        <p style="margin:4px 0 0; color:var(--primary); font-weight:600;">{{ resumePreviewData.employee.designation }} · {{ resumePreviewData.employee.department }}</p>
+                      </div>
+                      <div *ngIf="!resumeSettings.resumeHideContact" style="text-align:right; font-size:11px; color:#475569;">
+                        <div>{{ resumePreviewData.employee.email }}</div>
+                        <div>{{ resumePreviewData.employee.phone }}</div>
+                        <div>{{ resumePreviewData.employee.workLocation }}</div>
+                      </div>
+                    </div>
+
+                    <!-- Auto-Summary -->
+                    <div *ngIf="resumePreviewData.employee.autoSummary" style="margin-bottom:16px;">
+                      <h4 style="margin:0 0 4px; color:var(--primary); text-transform:uppercase; font-size:11px; letter-spacing:1px;">Professional Summary</h4>
+                      <p style="font-size:12px; color:#334155; line-height:1.6; font-style:italic;">{{ resumePreviewData.employee.autoSummary }}</p>
+                    </div>
+
+                    <!-- Skills -->
+                    <div *ngIf="resumePreviewData.skills?.length" style="margin-bottom:16px;">
+                      <h4 style="margin:0 0 6px; color:var(--primary); text-transform:uppercase; font-size:11px; letter-spacing:1px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">Skills</h4>
+                      <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                        <span *ngFor="let s of resumePreviewData.skills" style="font-size:11px; padding:4px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px;">
+                          {{ s.name }} <span *ngIf="!resumeSettings.resumeHideRatings" style="color:var(--primary);">★{{ s.finalRating || s.selfRating }}</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    <!-- Projects -->
+                    <div *ngIf="resumePreviewData.projects?.length" style="margin-bottom:16px;">
+                      <h4 style="margin:0 0 6px; color:var(--primary); text-transform:uppercase; font-size:11px; letter-spacing:1px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">Projects</h4>
+                      <div *ngFor="let p of resumePreviewData.projects" style="margin-bottom:10px; font-size:12px;">
+                        <div style="display:flex; justify-content:space-between; font-weight:600;">
+                          <span>{{ p.name }} - {{ p.role }}</span>
+                          <span style="color:#64748b;">{{ p.startDate | date:'MMM y' }} - {{ p.endDate ? (p.endDate | date:'MMM y') : 'Present' }}</span>
+                        </div>
+                        <p style="margin:2px 0 0; color:#475569; font-size:11px;">{{ p.responsibilities }}</p>
+                      </div>
+                    </div>
+
+                    <!-- Education -->
+                    <div *ngIf="resumePreviewData.employee.education" style="margin-bottom:16px;">
+                      <h4 style="margin:0 0 6px; color:var(--primary); text-transform:uppercase; font-size:11px; letter-spacing:1px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">Education</h4>
+                      <p style="font-size:12px; color:#334155; margin:0;">{{ resumePreviewData.employee.education }}</p>
+                    </div>
+
+                    <!-- Trainings & Certificates -->
+                    <div *ngIf="resumePreviewData.trainings?.length || resumePreviewData.certificates?.length" style="margin-bottom:16px;">
+                      <h4 style="margin:0 0 6px; color:var(--primary); text-transform:uppercase; font-size:11px; letter-spacing:1px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">Trainings & Certifications</h4>
+                      <div *ngFor="let t of resumePreviewData.trainings" style="font-size:11px; margin-bottom:4px; display:flex; justify-content:space-between;">
+                        <span><strong>{{ t.title }}</strong> - {{ t.provider }}</span>
+                        <span style="color:#64748b;">{{ t.completionDate | date:'MMM y' }}</span>
+                      </div>
+                      <div *ngFor="let c of resumePreviewData.certificates" style="font-size:11px; margin-bottom:4px; display:flex; justify-content:space-between;">
+                        <span><strong>{{ c.name }}</strong> - {{ c.issuer }}</span>
+                        <span style="color:#64748b;">{{ c.issueDate | date:'MMM y' }}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted); margin-top:4px;">
-                  <span>0</span>
-                  <span style="font-weight:700;" [style.color]="m.capacityStatus === 'OVER_CAPACITY' ? 'var(--error)' : m.capacityStatus === 'FULL' ? 'var(--warning)' : 'var(--success)'">{{ m.capacityStatus }}</span>
-                  <span>{{ m.maxCapacity }}</span>
-                </div>
               </div>
-              <div style="display:flex; flex-direction:column; gap:6px; min-width:120px;">
-                <span style="font-size:11px; padding:3px 10px; border-radius:50px; text-align:center; font-weight:700;" [style.background]="m.capacityStatus === 'AVAILABLE' ? 'rgba(34,197,94,0.12)' : m.capacityStatus === 'FULL' ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)'" [style.color]="m.capacityStatus === 'AVAILABLE' ? 'var(--success)' : m.capacityStatus === 'FULL' ? 'var(--warning)' : 'var(--error)'">{{ m.capacityStatus }}</span>
-                <span style="font-size:11px; color:var(--text-muted); text-align:center;">Util: {{ m.utilisationPercent }}%</span>
-              </div>
+              <ng-template #loadingResume>
+                <p>Loading resume preview...</p>
+              </ng-template>
             </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- 5. Forms Modals Overlay (kept for original CRUD + new modals) -->
-      <div *ngIf="activeModal !== null" class="modal-overlay">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h3>{{ modalTitle }}</h3>
-            <button class="btn-close" (click)="closeModal()">
-              <span class="material-icons">close</span>
-            </button>
-          </div>
-          
-          <div class="modal-body">
-            <p style="margin:0; color:var(--text-muted);">Modal content is loading. Please close and reopen if needed.</p>
+            <!-- Allocate / Re-allocate Manager Form -->
+            <form *ngIf="activeModal === 'allocate'" [formGroup]="allocateForm" (ngSubmit)="onSaveAllocate()">
+              <div class="form-group">
+                <label>Select Employee</label>
+                <select class="form-control" formControlName="employeeId">
+                  <option value="" disabled>-- Choose Employee --</option>
+                  <option *ngFor="let emp of employeesList" [value]="emp.id">
+                    {{ emp.employeeCode }} - {{ emp.firstName }} {{ emp.lastName }}
+                  </option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Select Target Manager</label>
+                <select class="form-control" formControlName="managerId">
+                  <option value="" disabled>-- Choose Manager --</option>
+                  <option *ngFor="let m of managerCapacities" [value]="m.manager?.id">
+                    {{ m.manager?.firstName }} {{ m.manager?.lastName }} ({{ m.currentTeamSize }}/{{ m.maxCapacity }} allocated)
+                  </option>
+                </select>
+              </div>
+              <div *ngIf="actionError" class="error-banner">{{ actionError }}</div>
+              <button type="submit" class="btn btn-primary w-full">Re-allocate Employee</button>
+            </form>
           </div>
         </div>
       </div>
@@ -570,19 +1390,59 @@ import { Subscription } from "rxjs";
 })
 export class AdminDashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   activeTab = 'dashboard';
+  currentUser: any;
   private routeSub!: Subscription;
   private routeTabMap: Record<string, string> = {
     '/admin/dashboard': 'dashboard',
-    '/admin/employees': 'dashboard',
-    '/admin/skills':    'dashboard',
-    '/admin/training':  'dashboard',
-    '/admin/tickets':   'dashboard',
-    '/admin/logs':      'dashboard',
-    '/admin/profile':   'dashboard',
+    '/admin/employees': 'employees',
+    '/admin/skills':    'skills',
+    '/admin/training':  'training',
+    '/admin/tickets':   'tickets',
+    '/admin/logs':      'logs',
+    '/admin/profile':   'profile',
     '/admin/projects':  'projects',
     '/admin/reports':   'reports',
     '/admin/allocation':'allocation',
   };
+
+  // Employees Directory
+  employeeSearchText = '';
+  selectedDeptFilter = '';
+  filteredEmployees: any[] = [];
+
+  // Skill catalog
+  skillSearchText = '';
+  selectedSkillCatFilter = '';
+  filteredSkills: any[] = [];
+  skillSuggestions: any[] = [];
+  activeSuggestionTicket: any = null;
+
+  // Training & certificates
+  trainingSearchText = '';
+  filteredTrainingPlans: any[] = [];
+  trainingPlansList: any[] = [];
+  certificatesList: any[] = [];
+
+  // Support Tickets Helpdesk
+  tickets: any[] = [];
+  selectedTicket: any = null;
+  newReplyMessage = '';
+  selectedResumeMember: any;
+  resumePreviewData: any;
+  resumeSettings = { resumeTemplate: 'minimalist', resumeHideContact: false, resumeHideRatings: false };
+  replyIsInternal = false;
+  replyFile: File | null = null;
+  resolutionText = '';
+  ticketStatusFilter = '';
+  ticketSearchText = '';
+  filteredTicketsList: any[] = [];
+
+  // System Logs
+  allAuditLogs: any[] = [];
+  allErrorLogs: any[] = [];
+  logsSearchText = '';
+  filteredAuditLogs: any[] = [];
+  filteredErrorLogs: any[] = [];
 
   stats: any;
   auditLogs: any[] = [];
@@ -601,11 +1461,19 @@ export class AdminDashboardComponent implements OnInit, OnDestroy, AfterViewInit
   activeReport = 'employees';
   reportRows: any[] = [];
   filteredReportRows: any[] = [];
+  paginatedReportRows: any[] = [];
   reportColumns: string[] = [];
   reportColumnKeys: string[] = [];
   reportSearch = '';
+  reportDeptFilter = '';
+  reportStatusFilter = '';
+  reportManagerFilter = '';
   reportLoading = false;
-  reportPageSize = 50;
+  reportPageSize = 10;
+  reportCurrentPage = 1;
+  totalReportPages = 1;
+  reportSortField = '';
+  reportSortOrder: 'asc' | 'desc' = 'asc';
   Math = Math;
 
   // Manager Capacities
@@ -643,6 +1511,7 @@ export class AdminDashboardComponent implements OnInit, OnDestroy, AfterViewInit
   ) {}
 
   ngOnInit() {
+    this.currentUser = JSON.parse(localStorage.getItem("currentUser") || "{}");
     this.setTabFromUrl(this.router.url);
     this.routeSub = this.router.events
       .pipe(filter((e) => e instanceof NavigationEnd))
@@ -660,10 +1529,297 @@ export class AdminDashboardComponent implements OnInit, OnDestroy, AfterViewInit
   setTabFromUrl(url: string) {
     const base = url.split('?')[0];
     this.activeTab = this.routeTabMap[base] || 'dashboard';
-    if (this.activeTab === 'projects') this.loadProjects();
-    if (this.activeTab === 'reports') this.loadReportData();
-    if (this.activeTab === 'allocation') this.loadManagerCapacities();
+    this.actionError = "";
+    if (this.activeTab === 'dashboard') {
+      this.loadStats();
+      this.loadGrids();
+    }
+    if (this.activeTab === 'employees') {
+      this.loadEmployees();
+    }
+    if (this.activeTab === 'skills') {
+      this.loadSkills();
+      this.loadSkillSuggestions();
+    }
+    if (this.activeTab === 'training') {
+      this.loadTrainingPlans();
+      this.loadCertificates();
+    }
+    if (this.activeTab === 'tickets') {
+      this.loadTickets();
+    }
+    if (this.activeTab === 'logs') {
+      this.loadAllLogs();
+    }
+    if (this.activeTab === 'projects') {
+      this.loadProjects();
+    }
+    if (this.activeTab === 'reports') {
+      this.loadReportData();
+    }
+    if (this.activeTab === 'allocation') {
+      this.loadManagerCapacities();
+    }
     this.cdr.detectChanges();
+  }
+
+  loadEmployees() {
+    this.dataService.getEmployees({ limit: 100 }).subscribe((res) => {
+      this.employeesList = res.data || [];
+      this.filterEmployeesList();
+    });
+  }
+
+  filterEmployeesList() {
+    let list = [...this.employeesList];
+    if (this.selectedDeptFilter) {
+      list = list.filter(e => e.departmentId === this.selectedDeptFilter);
+    }
+    if (this.employeeSearchText) {
+      const q = this.employeeSearchText.toLowerCase();
+      list = list.filter(e =>
+        e.firstName?.toLowerCase().includes(q) ||
+        e.lastName?.toLowerCase().includes(q) ||
+        e.employeeCode?.toLowerCase().includes(q) ||
+        e.email?.toLowerCase().includes(q)
+      );
+    }
+    this.filteredEmployees = list;
+  }
+
+  selectDeptFilter(deptId: string) {
+    this.selectedDeptFilter = deptId;
+    this.filterEmployeesList();
+  }
+
+  toggleEmployee(emp: any) {
+    const newStatus = emp.accountStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    this.dataService.toggleEmployeeStatus(emp.id, newStatus).subscribe({
+      next: () => { this.loadEmployees(); },
+      error: (err) => alert(err.error?.message || "Failed to update employee status")
+    });
+  }
+
+  onCSVFileSelected(event: any) {
+    const file: File = event.target.files[0];
+    if (file) {
+      const formData = new FormData();
+      formData.append("file", file);
+      this.dataService.importEmployeesCSV(formData).subscribe({
+        next: (res) => {
+          alert(`Import complete! Created: ${res.data.createdCount}, Failed: ${res.data.failedCount}`);
+          this.loadEmployees();
+        },
+        error: (err) => alert(err.error?.message || "Failed to import CSV file.")
+      });
+    }
+  }
+
+  loadSkills() {
+    this.dataService.getSkills({ limit: 200 }).subscribe((res) => {
+      this.skillsList = res.data || [];
+      this.filterSkillsList();
+    });
+  }
+
+  filterSkillsList() {
+    let list = [...this.skillsList];
+    if (this.selectedSkillCatFilter) {
+      list = list.filter(s => s.categoryId === this.selectedSkillCatFilter);
+    }
+    if (this.skillSearchText) {
+      const q = this.skillSearchText.toLowerCase();
+      list = list.filter(s => s.skillName?.toLowerCase().includes(q) || s.skillCode?.toLowerCase().includes(q));
+    }
+    this.filteredSkills = list;
+  }
+
+  loadSkillSuggestions() {
+    this.dataService.getTickets({ category: 'SKILL' }).subscribe((res) => {
+      const tix = res.data || [];
+      this.skillSuggestions = tix.filter((t: any) => t.subject?.startsWith("Suggested Skill Request:"));
+    });
+  }
+
+  approveSkillSuggestion(ticket: any) {
+    const skillName = ticket.subject.replace("Suggested Skill Request:", "").trim();
+    this.openModal('skill');
+    this.skillForm.patchValue({
+      skillName,
+      skillCode: `SK-${Math.floor(100 + Math.random() * 900)}`,
+      categoryId: ticket.description ? ticket.description.split("|")[1]?.trim() : "",
+      skillType: ticket.description ? ticket.description.split("|")[2]?.trim() || "TECHNICAL" : "TECHNICAL"
+    });
+    this.activeSuggestionTicket = ticket;
+  }
+
+  rejectSkillSuggestion(ticket: any) {
+    const reason = prompt("Enter rejection reason:");
+    if (reason === null) return;
+    if (!reason) { alert("Rejection reason is required."); return; }
+    this.dataService.resolveTicket(ticket.id, { resolutionDetails: `Rejected. Reason: ${reason}` }).subscribe({
+      next: () => {
+        alert("Rejection recorded.");
+        this.loadSkillSuggestions();
+      },
+      error: (err) => alert(err.error?.message || "Failed to reject suggestion.")
+    });
+  }
+
+  loadTrainingPlans() {
+    this.dataService.getTrainingPlans({ limit: 200 }).subscribe((res) => {
+      this.trainingPlansList = res.data || [];
+      this.filterTrainingList();
+    });
+  }
+
+  filterTrainingList() {
+    let list = [...this.trainingPlansList];
+    if (this.trainingSearchText) {
+      const q = this.trainingSearchText.toLowerCase();
+      list = list.filter(tp =>
+        tp.trainingTitle?.toLowerCase().includes(q) ||
+        tp.trainingCode?.toLowerCase().includes(q) ||
+        tp.employee?.firstName?.toLowerCase().includes(q) ||
+        tp.employee?.lastName?.toLowerCase().includes(q)
+      );
+    }
+    this.filteredTrainingPlans = list;
+  }
+
+  loadCertificates() {
+    this.dataService.getCertificates({ limit: 100 }).subscribe((res) => {
+      this.certificatesList = res.data || [];
+    });
+  }
+
+  verifyCertificate(cert: any, decision: 'VERIFIED' | 'REJECTED') {
+    let reason = '';
+    if (decision === 'REJECTED') {
+      reason = prompt("Enter rejection reason:") || '';
+      if (reason === '') {
+        alert("Rejection reason is required.");
+        return;
+      }
+    }
+    this.dataService.verifyCertificate(cert.id, { decision, rejectionReason: reason }).subscribe({
+      next: () => {
+        alert(`Certificate marked as ${decision.toLowerCase()}!`);
+        this.loadCertificates();
+      },
+      error: (err) => alert(err.error?.message || "Failed to update certificate verification status.")
+    });
+  }
+
+  loadTickets() {
+    this.dataService.getTickets({ limit: 100 }).subscribe((res) => {
+      this.tickets = res.data || [];
+      this.filterTicketsList();
+    });
+  }
+
+  filterTicketsList() {
+    let list = [...this.tickets];
+    if (this.ticketStatusFilter) {
+      list = list.filter(t => t.status === this.ticketStatusFilter);
+    }
+    if (this.ticketSearchText) {
+      const q = this.ticketSearchText.toLowerCase();
+      list = list.filter(t =>
+        t.ticketNumber?.toLowerCase().includes(q) ||
+        t.subject?.toLowerCase().includes(q) ||
+        t.category?.toLowerCase().includes(q) ||
+        t.employee?.firstName?.toLowerCase().includes(q) ||
+        t.employee?.lastName?.toLowerCase().includes(q) ||
+        t.manager?.firstName?.toLowerCase().includes(q) ||
+        t.manager?.lastName?.toLowerCase().includes(q)
+      );
+    }
+    this.filteredTicketsList = list;
+  }
+
+  selectTicket(ticket: any) {
+    this.dataService.getTicketById(ticket.id).subscribe((res) => {
+      this.selectedTicket = res.data;
+      this.newReplyMessage = '';
+      this.replyIsInternal = false;
+      this.replyFile = null;
+      this.resolutionText = '';
+    });
+  }
+
+  onReplyFileSelected(event: any) {
+    this.replyFile = event.target.files[0];
+  }
+
+  postReply() {
+    if (!this.newReplyMessage && !this.replyFile) return;
+    const formData = new FormData();
+    formData.append("message", this.newReplyMessage);
+    formData.append("isInternal", String(this.replyIsInternal));
+    if (this.replyFile) {
+      formData.append("file", this.replyFile);
+    }
+    this.dataService.addTicketMessage(this.selectedTicket.id, formData).subscribe({
+      next: () => {
+        this.selectTicket(this.selectedTicket);
+      },
+      error: (err) => alert(err.error?.message || "Failed to post reply.")
+    });
+  }
+
+  submitTicketResolution() {
+    if (!this.resolutionText) return;
+    this.dataService.resolveTicket(this.selectedTicket.id, { resolutionDetails: this.resolutionText }).subscribe({
+      next: () => {
+        alert("Ticket resolved successfully!");
+        this.selectTicket(this.selectedTicket);
+        this.loadTickets();
+      },
+      error: (err) => alert(err.error?.message || "Failed to resolve ticket.")
+    });
+  }
+
+  assignTicketToMe(ticket: any) {
+    const currentUser = JSON.parse(localStorage.getItem("currentUser") || "{}");
+    this.dataService.assignTicket(ticket.id, { assignedAdminId: currentUser.id }).subscribe({
+      next: () => {
+        alert("Ticket assigned to you.");
+        this.loadTickets();
+        if (this.selectedTicket?.id === ticket.id) this.selectTicket(ticket);
+      },
+      error: (err) => alert(err.error?.message || "Failed to assign ticket.")
+    });
+  }
+
+  loadAllLogs() {
+    this.dataService.getAuditLogs({ limit: 100 }).subscribe((res) => {
+      this.allAuditLogs = res.data || [];
+      this.filterLogsList();
+    });
+    this.dataService.getErrorLogs({ limit: 100 }).subscribe((res) => {
+      this.allErrorLogs = res.data || [];
+      this.filterLogsList();
+    });
+  }
+
+  filterLogsList() {
+    if (!this.logsSearchText) {
+      this.filteredAuditLogs = [...this.allAuditLogs];
+      this.filteredErrorLogs = [...this.allErrorLogs];
+      return;
+    }
+    const q = this.logsSearchText.toLowerCase();
+    this.filteredAuditLogs = this.allAuditLogs.filter(log =>
+      log.action?.toLowerCase().includes(q) ||
+      log.component?.toLowerCase().includes(q) ||
+      log.user?.email?.toLowerCase().includes(q)
+    );
+    this.filteredErrorLogs = this.allErrorLogs.filter(log =>
+      log.errorMessage?.toLowerCase().includes(q) ||
+      log.endpoint?.toLowerCase().includes(q) ||
+      log.method?.toLowerCase().includes(q)
+    );
   }
 
   ngAfterViewInit() {
@@ -756,6 +1912,29 @@ export class AdminDashboardComponent implements OnInit, OnDestroy, AfterViewInit
   closeModal() {
     this.activeModal = null;
     this.actionError = "";
+    this.resumePreviewData = null;
+    this.selectedResumeMember = null;
+  }
+
+  viewEmployeeResume(member: any) {
+    this.selectedResumeMember = member;
+    this.activeModal = 'resumePreview';
+    this.modalTitle = `Resume Preview: ${member.firstName} ${member.lastName}`;
+    this.resumePreviewData = null;
+    this.dataService.getResumeData(member.id).subscribe({
+      next: (res) => (this.resumePreviewData = res.data),
+      error: (err) => (this.actionError = err.error?.message || 'Failed to load resume'),
+    });
+  }
+
+  downloadMemberResumePDF() {
+    if (this.resumePreviewData) {
+      exportHtmlToPdf('resumePreviewWindow', `Resume_${this.resumePreviewData.employee.firstName}_${this.resumePreviewData.employee.lastName}`);
+    }
+  }
+
+  printMemberResume() {
+    window.print();
   }
 
   onSaveEmployee() {
@@ -786,9 +1965,16 @@ export class AdminDashboardComponent implements OnInit, OnDestroy, AfterViewInit
     if (this.skillForm.invalid) return;
     this.dataService.createSkill(this.skillForm.value).subscribe({
       next: () => {
+        if (this.activeSuggestionTicket) {
+          this.dataService.resolveTicket(this.activeSuggestionTicket.id, { resolutionDetails: `Approved! Skill "${this.skillForm.value.skillName}" created in catalog.` }).subscribe(() => {
+            this.activeSuggestionTicket = null;
+            this.loadSkillSuggestions();
+          });
+        }
         this.closeModal();
         this.loadStats();
         this.loadFormContexts();
+        this.loadSkills();
       },
       error: (err) => (this.actionError = err.error?.message || "Failed to create skill"),
     });
@@ -870,44 +2056,151 @@ export class AdminDashboardComponent implements OnInit, OnDestroy, AfterViewInit
     const obs: any = {
       employees:    this.dataService.getReportEmployees(),
       managers:     this.dataService.getReportManagers(),
+      departments:  this.dataService.getReportDepartments(),
+      teams:        this.dataService.getReportTeams(),
       projects:     this.dataService.getReportProjects(),
       training:     this.dataService.getReportTraining(),
       skills:       this.dataService.getReportSkills(),
+      skillgaps:    this.dataService.getReportSkillGaps(),
       certificates: this.dataService.getReportCertificates(),
       tickets:      this.dataService.getReportTickets(),
+      audit:        this.dataService.getReportAudit(),
       downloads:    this.dataService.getReportDownloads(),
     }[this.activeReport];
+    
     if (obs) {
       obs.subscribe({
         next: (r: any) => {
           this.reportRows = r.data || [];
           this.reportColumnKeys = this.reportRows.length > 0 ? Object.keys(this.reportRows[0]) : [];
           this.reportColumns = this.reportColumnKeys.map(k => k.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()));
+          this.reportDeptFilter = '';
+          this.reportStatusFilter = '';
+          this.reportManagerFilter = '';
           this.filterReportRows();
           this.reportLoading = false;
         },
         error: () => (this.reportLoading = false),
       });
+    } else {
+      this.reportLoading = false;
     }
   }
 
   filterReportRows() {
-    if (!this.reportSearch) { this.filteredReportRows = [...this.reportRows]; return; }
-    const q = this.reportSearch.toLowerCase();
-    this.filteredReportRows = this.reportRows.filter(r =>
-      Object.values(r).some((v: any) => String(v).toLowerCase().includes(q))
-    );
+    let list = [...this.reportRows];
+
+    // Global Search
+    if (this.reportSearch.trim()) {
+      const q = this.reportSearch.toLowerCase();
+      list = list.filter(row =>
+        Object.values(row).some((val: any) => String(val ?? '').toLowerCase().includes(q))
+      );
+    }
+
+    // Department Filter
+    if (this.reportDeptFilter && this.hasReportColumn('department')) {
+      list = list.filter(row => row.department === this.reportDeptFilter);
+    }
+
+    // Status Filter
+    if (this.reportStatusFilter) {
+      if (this.hasReportColumn('status')) {
+        list = list.filter(row => row.status === this.reportStatusFilter);
+      } else if (this.hasReportColumn('verificationStatus')) {
+        list = list.filter(row => row.verificationStatus === this.reportStatusFilter);
+      }
+    }
+
+    // Manager Filter
+    if (this.reportManagerFilter && this.hasReportColumn('manager')) {
+      list = list.filter(row => row.manager === this.reportManagerFilter);
+    }
+
+    // Sort
+    if (this.reportSortField) {
+      list.sort((a, b) => {
+        let valA = a[this.reportSortField];
+        let valB = b[this.reportSortField];
+
+        if (valA === undefined || valA === null) valA = '';
+        if (valB === undefined || valB === null) valB = '';
+
+        if (typeof valA === 'string') {
+          return this.reportSortOrder === 'asc'
+            ? valA.localeCompare(valB)
+            : valB.localeCompare(valA);
+        } else {
+          return this.reportSortOrder === 'asc'
+            ? valA - valB
+            : valB - valA;
+        }
+      });
+    }
+
+    this.filteredReportRows = list;
+    this.resetReportPagination();
   }
 
-  exportReportCSV() {
+  hasReportColumn(colKey: string): boolean {
+    return this.reportColumnKeys.includes(colKey);
+  }
+
+  getUniqueManagers(): string[] {
+    const managers = this.reportRows
+      .map(r => r.manager)
+      .filter((m): m is string => !!m && m !== '—');
+    return Array.from(new Set(managers));
+  }
+
+  isDateValue(val: any): boolean {
+    if (!val || typeof val !== 'string') return false;
+    return /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?/.test(val);
+  }
+
+  resetReportPagination() {
+    this.reportCurrentPage = 1;
+    this.calculateReportPagination();
+  }
+
+  calculateReportPagination() {
+    this.totalReportPages = Math.ceil(this.filteredReportRows.length / Number(this.reportPageSize)) || 1;
+    const startIdx = (this.reportCurrentPage - 1) * Number(this.reportPageSize);
+    this.paginatedReportRows = this.filteredReportRows.slice(startIdx, startIdx + Number(this.reportPageSize));
+  }
+
+  setReportPage(page: number) {
+    this.reportCurrentPage = page;
+    this.calculateReportPagination();
+  }
+
+  toggleReportSort(field: string) {
+    if (this.reportSortField === field) {
+      this.reportSortOrder = this.reportSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.reportSortField = field;
+      this.reportSortOrder = 'asc';
+    }
+    this.filterReportRows();
+  }
+
+  downloadReport(type: 'csv' | 'excel' | 'pdf' | 'print') {
     if (!this.filteredReportRows.length) return;
-    const headers = this.reportColumnKeys.join(',');
-    const rows = this.filteredReportRows.map(r => this.reportColumnKeys.map(k => `"${r[k] || ''}"`).join(',')).join('\n');
-    const blob = new Blob([headers + '\n' + rows], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `report_${this.activeReport}_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
+    const title = `Report_${this.activeReport}_${new Date().toISOString().split('T')[0]}`;
+    
+    const rowsData = this.filteredReportRows.map(r =>
+      this.reportColumnKeys.map(k => r[k] !== null && r[k] !== undefined ? String(r[k]) : '')
+    );
+
+    if (type === 'csv') {
+      exportToCsv(this.reportColumns, rowsData, title);
+    } else if (type === 'excel') {
+      exportToExcel(this.reportColumns, rowsData, title);
+    } else if (type === 'pdf') {
+      exportToPdf(this.reportColumns, rowsData, title);
+    } else if (type === 'print') {
+      printTable(this.reportColumns, rowsData, title.replace(/_/g, ' '));
+    }
   }
 
   renderCharts() {

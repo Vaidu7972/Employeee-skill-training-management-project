@@ -1,9 +1,12 @@
-import { Component, OnInit, AfterViewInit } from "@angular/core";
+import { Component, OnInit, AfterViewInit, OnDestroy } from "@angular/core";
 import { FormBuilder, FormGroup, Validators } from "@angular/forms";
 import { DataService } from "../../core/services/data.service";
 import { AuthService } from "../../core/services/auth.service";
-import { exportToCsv, exportToExcel, printTable } from "../../core/utils/export.utils";
+import { exportToCsv, exportToExcel, printTable, exportToPdf, exportHtmlToPdf } from "../../core/utils/export.utils";
 import { Chart } from "chart.js/auto";
+import { forkJoin, Subscription } from "rxjs";
+import { Router, NavigationEnd } from "@angular/router";
+import { filter } from "rxjs/operators";
 
 @Component({
   selector: "app-manager-dashboard",
@@ -84,13 +87,44 @@ import { Chart } from "chart.js/auto";
           </div>
         </div>
 
-        <!-- Team Members List (with Search, Multi-Filter, and Exports) -->
-        <div class="dashboard-card">
+        <!-- Sub Tabs Navigation -->
+        <div class="secondary-tab-bar" style="display:flex; gap:8px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:12px; flex-wrap:wrap;">
+          <button class="btn btn-sm" [class.btn-primary]="activeSubTab === 'profiles'" (click)="setSubTab('profiles')">
+            <span class="material-icons" style="font-size:16px; vertical-align:middle; margin-right:4px;">badge</span>Team Profiles
+          </button>
+          <button class="btn btn-sm" [class.btn-primary]="activeSubTab === 'skills'" (click)="setSubTab('skills')">
+            <span class="material-icons" style="font-size:16px; vertical-align:middle; margin-right:4px;">psychology</span>Skills & Reviews
+          </button>
+          <button class="btn btn-sm" [class.btn-primary]="activeSubTab === 'gaps'" (click)="setSubTab('gaps')">
+            <span class="material-icons" style="font-size:16px; vertical-align:middle; margin-right:4px;">trending_down</span>Skill Gaps
+          </button>
+          <button class="btn btn-sm" [class.btn-primary]="activeSubTab === 'training'" (click)="setSubTab('training')">
+            <span class="material-icons" style="font-size:16px; vertical-align:middle; margin-right:4px;">model_training</span>Trainings
+          </button>
+          <button class="btn btn-sm" [class.btn-primary]="activeSubTab === 'certificates'" (click)="setSubTab('certificates')">
+            <span class="material-icons" style="font-size:16px; vertical-align:middle; margin-right:4px;">military_tech</span>Certificates
+          </button>
+          <button class="btn btn-sm" [class.btn-primary]="activeSubTab === 'projects'" (click)="setSubTab('projects')">
+            <span class="material-icons" style="font-size:16px; vertical-align:middle; margin-right:4px;">lan</span>Projects
+          </button>
+          <button class="btn btn-sm" [class.btn-primary]="activeSubTab === 'resumes'" (click)="setSubTab('resumes')">
+            <span class="material-icons" style="font-size:16px; vertical-align:middle; margin-right:4px;">description</span>Team Resumes
+          </button>
+          <button class="btn btn-sm" [class.btn-primary]="activeSubTab === 'tickets'" (click)="setSubTab('tickets')">
+            <span class="material-icons" style="font-size:16px; vertical-align:middle; margin-right:4px;">support_agent</span>Helpdesk ({{ teamTickets.length }})
+          </button>
+        </div>
+
+        <!-- ================================================== -->
+        <!-- SUB-TAB 1: TEAM PROFILES -->
+        <!-- ================================================== -->
+        <div *ngIf="activeSubTab === 'profiles'" class="dashboard-card">
           <div class="card-header border-b">
             <h4>My Direct Team Profiles</h4>
             <div class="export-actions">
               <button class="btn btn-outline-sm" (click)="exportTeam('csv')">CSV</button>
               <button class="btn btn-outline-sm" (click)="exportTeam('excel')">Excel</button>
+              <button class="btn btn-outline-sm" (click)="exportTeam('pdf')">PDF</button>
               <button class="btn btn-outline-sm" (click)="exportTeam('print')">Print</button>
             </div>
           </div>
@@ -98,7 +132,6 @@ import { Chart } from "chart.js/auto";
           <!-- Filters panel -->
           <div class="filters-row">
             <input type="text" class="form-control filter-input" [(ngModel)]="searchQuery" (input)="applyTeamFilters()" placeholder="Global search..." />
-            
             <input type="text" class="form-control filter-input" [(ngModel)]="codeFilter" (input)="applyTeamFilters()" placeholder="Filter Code..." />
             <input type="text" class="form-control filter-input" [(ngModel)]="nameFilter" (input)="applyTeamFilters()" placeholder="Filter Name..." />
             <input type="text" class="form-control filter-input" [(ngModel)]="designationFilter" (input)="applyTeamFilters()" placeholder="Filter Designation..." />
@@ -117,11 +150,11 @@ import { Chart } from "chart.js/auto";
             <table class="table">
               <thead>
                 <tr>
-                  <th (click)="toggleSort('employeeCode')">Code <span class="material-icons sort-icon">swap_vert</span></th>
-                  <th (click)="toggleSort('firstName')">Name <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleSort('employeeCode')" style="cursor:pointer; user-select:none;">Code <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleSort('firstName')" style="cursor:pointer; user-select:none;">Name <span class="material-icons sort-icon">swap_vert</span></th>
                   <th>Email</th>
-                  <th (click)="toggleSort('designationId')">Designation <span class="material-icons sort-icon">swap_vert</span></th>
-                  <th (click)="toggleSort('yearsOfExperience')">Experience <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleSort('designationId')" style="cursor:pointer; user-select:none;">Designation <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleSort('yearsOfExperience')" style="cursor:pointer; user-select:none;">Experience <span class="material-icons sort-icon">swap_vert</span></th>
                   <th>Work Mode</th>
                   <th>Resume</th>
                 </tr>
@@ -152,155 +185,685 @@ import { Chart } from "chart.js/auto";
           </div>
         </div>
 
-        <!-- Pending Assessments reviews queue -->
-        <div class="dashboard-card">
-          <h4>Pending Team Skill Self-Assessments</h4>
-          <div class="table-responsive">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>Employee</th>
-                  <th>Skill Name</th>
-                  <th>Self Rating</th>
-                  <th>Comments</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngIf="pendingAssessments.length === 0">
-                  <td colspan="5" class="text-center text-muted">No pending skill ratings to approve.</td>
-                </tr>
-                <tr *ngFor="let ass of pendingAssessments">
-                  <td>{{ ass.employee?.firstName }} {{ ass.employee?.lastName }}</td>
-                  <td>{{ ass.skill?.skillName }}</td>
-                  <td><span class="badge badge-primary">{{ ass.selfRating }} / 5</span></td>
-                  <td>{{ ass.employeeComments || 'None' }}</td>
-                  <td>
-                    <div class="action-btn-group">
-                      <button class="btn btn-success-sm" (click)="approveAssessment(ass, ass.selfRating)">Approve</button>
-                      <button class="btn btn-error-sm" (click)="rejectAssessment(ass)">Reject</button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+        <!-- ================================================== -->
+        <!-- SUB-TAB 2: SKILLS & REVIEWS -->
+        <!-- ================================================== -->
+        <div *ngIf="activeSubTab === 'skills'" style="display:flex; flex-direction:column; gap:20px;">
+          <!-- Self Assessments Review queue -->
+          <div class="dashboard-card">
+            <h4>Pending Team Skill Self-Assessments</h4>
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Skill Name</th>
+                    <th>Self Rating</th>
+                    <th>Comments</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngIf="pendingAssessments.length === 0">
+                    <td colspan="5" class="text-center text-muted">No pending skill ratings to approve.</td>
+                  </tr>
+                  <tr *ngFor="let ass of pendingAssessments">
+                    <td>{{ ass.employee?.firstName }} {{ ass.employee?.lastName }}</td>
+                    <td>{{ ass.skill?.skillName }}</td>
+                    <td><span class="badge badge-primary">{{ ass.selfRating }} / 5</span></td>
+                    <td>{{ ass.employeeComments || 'None' }}</td>
+                    <td>
+                      <div class="action-btn-group">
+                        <button class="btn btn-success-sm" (click)="approveAssessment(ass, ass.selfRating)">Approve</button>
+                        <button class="btn btn-error-sm" (click)="rejectAssessment(ass)">Reject</button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- All Team Skills Matrix Grid -->
+          <div class="dashboard-card">
+            <div class="card-header border-b">
+              <h4>Direct Team Skills Portfolio</h4>
+              <div class="export-actions">
+                <button class="btn btn-outline-sm" (click)="exportSkills('csv')">CSV</button>
+                <button class="btn btn-outline-sm" (click)="exportSkills('excel')">Excel</button>
+                <button class="btn btn-outline-sm" (click)="exportSkills('pdf')">PDF</button>
+                <button class="btn btn-outline-sm" (click)="exportSkills('print')">Print</button>
+              </div>
+            </div>
+
+            <div class="filters-row">
+              <input type="text" class="form-control filter-input" [(ngModel)]="skillsSearch" (input)="filterTeamSkills()" placeholder="Search employee or skill..." />
+              <select class="form-control filter-select" [(ngModel)]="skillsStatusFilter" (change)="filterTeamSkills()">
+                <option value="">All Statuses</option>
+                <option value="APPROVED">Approved</option>
+                <option value="SUBMITTED">Submitted</option>
+                <option value="ASSIGNED">Assigned</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
+              <select class="form-control filter-select" [(ngModel)]="skillsPageSize" (change)="resetSkillsPagination()">
+                <option [value]="5">5 Entries</option>
+                <option [value]="10">10 Entries</option>
+                <option [value]="20">20 Entries</option>
+                <option [value]="50">50 Entries</option>
+              </select>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th (click)="toggleSkillsSort('employeeName')" style="cursor:pointer; user-select:none;">Employee <span class="material-icons sort-icon">swap_vert</span></th>
+                    <th (click)="toggleSkillsSort('skillName')" style="cursor:pointer; user-select:none;">Skill <span class="material-icons sort-icon">swap_vert</span></th>
+                    <th (click)="toggleSkillsSort('selfRating')" style="cursor:pointer; user-select:none;">Self Rating <span class="material-icons sort-icon">swap_vert</span></th>
+                    <th (click)="toggleSkillsSort('finalRating')" style="cursor:pointer; user-select:none;">Final Rating <span class="material-icons sort-icon">swap_vert</span></th>
+                    <th (click)="toggleSkillsSort('status')" style="cursor:pointer; user-select:none;">Status <span class="material-icons sort-icon">swap_vert</span></th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let item of paginatedTeamSkills">
+                    <td>{{ item.employee?.firstName }} {{ item.employee?.lastName }}</td>
+                    <td><strong>{{ item.skill?.skillName }}</strong></td>
+                    <td>{{ item.selfRating }}/5</td>
+                    <td>{{ item.status === 'APPROVED' ? item.finalRating + '/5' : '—' }}</td>
+                    <td>
+                      <span class="badge" [ngClass]="{
+                        'badge-success': item.status === 'APPROVED',
+                        'badge-warning': item.status === 'SUBMITTED',
+                        'badge-info': item.status === 'ASSIGNED',
+                        'badge-error': item.status === 'REJECTED'
+                      }">{{ item.status }}</span>
+                    </td>
+                    <td>
+                      <button *ngIf="item.status === 'SUBMITTED'" class="btn btn-outline-sm" (click)="approveAssessment(item, item.selfRating)">Quick Approve</button>
+                      <span *ngIf="item.status === 'APPROVED'" style="font-size:11px; color:var(--success);">Verified</span>
+                      <span *ngIf="item.status !== 'SUBMITTED' && item.status !== 'APPROVED'" style="font-size:11px; color:var(--text-muted);">—</span>
+                    </td>
+                  </tr>
+                  <tr *ngIf="paginatedTeamSkills.length === 0">
+                    <td colspan="6" class="text-center text-muted">No skill records match the filters.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="pagination-footer">
+              <span>Showing {{ paginatedTeamSkills.length }} of {{ filteredTeamSkills.length }} entries</span>
+              <div class="pag-buttons">
+                <button class="btn btn-outline-sm" [disabled]="skillsPage === 1" (click)="setSkillsPage(skillsPage - 1)">Previous</button>
+                <button class="btn btn-outline-sm" [disabled]="skillsPage === totalSkillsPages" (click)="setSkillsPage(skillsPage + 1)">Next</button>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Pending Certificate Approvals queue -->
-        <div class="dashboard-card">
-          <h4>Pending Certificate Upload Verifications</h4>
+        <!-- ================================================== -->
+        <!-- SUB-TAB 3: TEAM SKILL GAPS -->
+        <!-- ================================================== -->
+        <div *ngIf="activeSubTab === 'gaps'" class="dashboard-card">
+          <div class="card-header border-b">
+            <h4>Team Skill Gaps Analysis</h4>
+            <div class="export-actions">
+              <button class="btn btn-outline-sm" (click)="exportGaps('csv')">CSV</button>
+              <button class="btn btn-outline-sm" (click)="exportGaps('excel')">Excel</button>
+              <button class="btn btn-outline-sm" (click)="exportGaps('pdf')">PDF</button>
+              <button class="btn btn-outline-sm" (click)="exportGaps('print')">Print</button>
+            </div>
+          </div>
+
+          <div class="filters-row">
+            <input type="text" class="form-control filter-input" [(ngModel)]="gapsSearch" (input)="filterTeamGaps()" placeholder="Search employee or skill..." />
+            <select class="form-control filter-select" [(ngModel)]="gapsPageSize" (change)="resetGapsPagination()">
+              <option [value]="5">5 Entries</option>
+              <option [value]="10">10 Entries</option>
+              <option [value]="20">20 Entries</option>
+              <option [value]="50">50 Entries</option>
+            </select>
+          </div>
+
           <div class="table-responsive">
             <table class="table">
               <thead>
                 <tr>
-                  <th>Employee</th>
-                  <th>Certificate Name</th>
-                  <th>Issuer</th>
-                  <th>Issue Date</th>
+                  <th (click)="toggleGapsSort('employeeName')" style="cursor:pointer; user-select:none;">Employee <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleGapsSort('skillName')" style="cursor:pointer; user-select:none;">Target Skill <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleGapsSort('requiredLevel')" style="cursor:pointer; user-select:none;">Required Rating <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleGapsSort('currentLevel')" style="cursor:pointer; user-select:none;">Current Rating <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleGapsSort('gap')" style="cursor:pointer; user-select:none;">Gap Difference <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleGapsSort('priority')" style="cursor:pointer; user-select:none;">Priority <span class="material-icons sort-icon">swap_vert</span></th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngIf="pendingCertificates.length === 0">
-                  <td colspan="5" class="text-center text-muted">No certificates uploaded to verify.</td>
-                </tr>
-                <tr *ngFor="let cert of pendingCertificates">
-                  <td>{{ cert.employee?.firstName }} {{ cert.employee?.lastName }}</td>
-                  <td>{{ cert.certificateName }}</td>
-                  <td>{{ cert.issuingOrganization }}</td>
-                  <td>{{ cert.issueDate | date }}</td>
+                <tr *ngFor="let item of paginatedTeamGaps">
+                  <td>{{ item.employeeName }}</td>
+                  <td><strong>{{ item.skillName }}</strong></td>
                   <td>
-                    <div class="action-btn-group">
-                      <button class="btn btn-success-sm" (click)="verifyCertificate(cert.id, 'VERIFIED')">Verify</button>
-                      <button class="btn btn-error-sm" (click)="rejectCertificate(cert)">Reject</button>
+                    <div style="display:flex; gap:2px;">
+                      <span *ngFor="let star of [1,2,3,4,5]" class="material-icons" style="font-size:14px;" [style.color]="item.requiredLevel >= star ? 'var(--primary)' : 'var(--border)'">star</span>
                     </div>
                   </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Support Tickets Queue -->
-        <div class="dashboard-card">
-          <h4>Team Support Helpdesk Queue</h4>
-          <div class="table-responsive">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>Number</th>
-                  <th>Employee</th>
-                  <th>Subject</th>
-                  <th>Category</th>
-                  <th>Priority</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngIf="teamTickets.length === 0">
-                  <td colspan="7" class="text-center text-muted">No team support tickets opened.</td>
-                </tr>
-                <tr *ngFor="let t of teamTickets">
-                  <td>{{ t.ticketNumber }}</td>
-                  <td>{{ t.creator?.firstName }} {{ t.creator?.lastName }}</td>
-                  <td>{{ t.subject }}</td>
-                  <td>{{ t.category }}</td>
+                  <td>
+                    <div style="display:flex; gap:2px;">
+                      <span *ngFor="let star of [1,2,3,4,5]" class="material-icons" style="font-size:14px;" [style.color]="item.currentLevel >= star ? 'var(--secondary)' : 'var(--border)'">star</span>
+                    </div>
+                  </td>
+                  <td><span class="text-error" style="font-weight:700;">+{{ item.gap }}</span></td>
                   <td>
                     <span class="badge" [ngClass]="{
-                      'badge-error': t.priority === 'CRITICAL' || t.priority === 'HIGH',
-                      'badge-warning': t.priority === 'MEDIUM',
-                      'badge-info': t.priority === 'LOW'
-                    }">{{ t.priority }}</span>
+                      'badge-error': item.priority === 'CRITICAL' || item.priority === 'HIGH',
+                      'badge-warning': item.priority === 'MEDIUM',
+                      'badge-info': item.priority === 'LOW'
+                    }">{{ item.priority }}</span>
                   </td>
                   <td>
-                    <span class="badge badge-info">{{ t.status }}</span>
+                    <button class="btn btn-primary btn-sm" style="padding:4px 8px; font-size:11px;" (click)="quickAssignTraining(item)">Recommend Training</button>
                   </td>
-                  <td>
-                    <button class="btn btn-outline-sm" (click)="viewTicketDetails(t)">View / Converse</button>
-                  </td>
+                </tr>
+                <tr *ngIf="paginatedTeamGaps.length === 0">
+                  <td colspan="7" class="text-center text-muted">No skill gaps detected in your direct team. Excellent work!</td>
                 </tr>
               </tbody>
             </table>
           </div>
+
+          <div class="pagination-footer">
+            <span>Showing {{ paginatedTeamGaps.length }} of {{ filteredTeamGaps.length }} entries</span>
+            <div class="pag-buttons">
+              <button class="btn btn-outline-sm" [disabled]="gapsPage === 1" (click)="setGapsPage(gapsPage - 1)">Previous</button>
+              <button class="btn btn-outline-sm" [disabled]="gapsPage === totalGapsPages" (click)="setGapsPage(gapsPage + 1)">Next</button>
+            </div>
+          </div>
         </div>
 
-        <!-- Active Support Chat dialog -->
-        <div class="dashboard-card flex-col" *ngIf="selectedTicket">
+        <!-- ================================================== -->
+        <!-- SUB-TAB 4: TEAM TRAINING TRACKER -->
+        <!-- ================================================== -->
+        <div *ngIf="activeSubTab === 'training'" class="dashboard-card">
           <div class="card-header border-b">
-            <h4>Converse Ticket: {{ selectedTicket.ticketNumber }}</h4>
-            <button class="btn btn-outline-sm" (click)="selectedTicket = null">Close Conversation</button>
+            <h4>Team Training Allocations & Progress</h4>
+            <div class="export-actions">
+              <button class="btn btn-outline-sm" (click)="exportTrainings('csv')">CSV</button>
+              <button class="btn btn-outline-sm" (click)="exportTrainings('excel')">Excel</button>
+              <button class="btn btn-outline-sm" (click)="exportTrainings('pdf')">PDF</button>
+              <button class="btn btn-outline-sm" (click)="exportTrainings('print')">Print</button>
+            </div>
           </div>
+
+          <div class="filters-row">
+            <input type="text" class="form-control filter-input" [(ngModel)]="trainingsSearch" (input)="filterTeamTrainings()" placeholder="Search employee or course..." />
+            <select class="form-control filter-select" [(ngModel)]="trainingsStatusFilter" (change)="filterTeamTrainings()">
+              <option value="">All Statuses</option>
+              <option value="ASSIGNED">Assigned</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="VERIFIED">Verified</option>
+              <option value="OVERDUE">Overdue</option>
+            </select>
+            <select class="form-control filter-select" [(ngModel)]="trainingsPageSize" (change)="resetTrainingsPagination()">
+              <option [value]="5">5 Entries</option>
+              <option [value]="10">10 Entries</option>
+              <option [value]="20">20 Entries</option>
+            </select>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th (click)="toggleTrainingsSort('employeeName')" style="cursor:pointer; user-select:none;">Employee <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleTrainingsSort('trainingTitle')" style="cursor:pointer; user-select:none;">Course <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleTrainingsSort('dueDate')" style="cursor:pointer; user-select:none;">Due Date <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleTrainingsSort('progress')" style="cursor:pointer; user-select:none;">Progress <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleTrainingsSort('status')" style="cursor:pointer; user-select:none;">Status <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let item of paginatedTeamTrainings">
+                  <td>{{ item.employee?.firstName }} {{ item.employee?.lastName }}</td>
+                  <td><strong>{{ item.trainingTitle }}</strong><br/><span style="font-size:11px; color:var(--text-muted);">Skill: {{ item.skill?.skillName }}</span></td>
+                  <td>{{ item.dueDate | date }}</td>
+                  <td>
+                    <div class="progress-bar-bg" style="width:100px;">
+                      <div class="progress-bar-fill" [style.width.%]="item.progress"></div>
+                    </div>
+                    <span style="font-size:11px;">{{ item.progress }}%</span>
+                  </td>
+                  <td>
+                    <span class="badge" [ngClass]="{
+                      'badge-success': item.status === 'VERIFIED' || item.status === 'COMPLETED',
+                      'badge-warning': item.status === 'IN_PROGRESS' || item.status === 'ASSIGNED',
+                      'badge-error': item.status === 'OVERDUE'
+                    }">{{ item.status }}</span>
+                  </td>
+                  <td>
+                    <button *ngIf="item.status === 'COMPLETED'" class="btn btn-outline-sm" (click)="verifyCertificate(item.id, 'VERIFIED')">Verify & Approve</button>
+                    <span *ngIf="item.status === 'VERIFIED'" style="font-size:11px; color:var(--success);">Verified</span>
+                    <span *ngIf="item.status !== 'COMPLETED' && item.status !== 'VERIFIED'">—</span>
+                  </td>
+                </tr>
+                <tr *ngIf="paginatedTeamTrainings.length === 0">
+                  <td colspan="6" class="text-center text-muted">No training programs assigned.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="pagination-footer">
+            <span>Showing {{ paginatedTeamTrainings.length }} of {{ filteredTeamTrainings.length }} entries</span>
+            <div class="pag-buttons">
+              <button class="btn btn-outline-sm" [disabled]="trainingsPage === 1" (click)="setTrainingsPage(trainingsPage - 1)">Previous</button>
+              <button class="btn btn-outline-sm" [disabled]="trainingsPage === totalTrainingsPages" (click)="setTrainingsPage(trainingsPage + 1)">Next</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================================================== -->
+        <!-- SUB-TAB 5: CERTIFICATES -->
+        <!-- ================================================== -->
+        <div *ngIf="activeSubTab === 'certificates'" style="display:flex; flex-direction:column; gap:20px;">
+          <!-- Pending Certifications Approvals Queue -->
+          <div class="dashboard-card">
+            <h4>Pending Certificate Upload Verifications</h4>
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Certificate Name</th>
+                    <th>Issuer</th>
+                    <th>Issue Date</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngIf="pendingCertificates.length === 0">
+                    <td colspan="5" class="text-center text-muted">No certificates uploaded to verify.</td>
+                  </tr>
+                  <tr *ngFor="let cert of pendingCertificates">
+                    <td>{{ cert.employee?.firstName }} {{ cert.employee?.lastName }}</td>
+                    <td>{{ cert.certificateName }}</td>
+                    <td>{{ cert.issuingOrganization }}</td>
+                    <td>{{ cert.issueDate | date }}</td>
+                    <td>
+                      <div class="action-btn-group">
+                        <button class="btn btn-success-sm" (click)="verifyCertificate(cert.id, 'VERIFIED')">Verify</button>
+                        <button class="btn btn-error-sm" (click)="rejectCertificate(cert)">Reject</button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- All Team Certificates Grid -->
+          <div class="dashboard-card">
+            <div class="card-header border-b">
+              <h4>Team Certificates Inventory</h4>
+              <div class="export-actions">
+                <button class="btn btn-outline-sm" (click)="exportCerts('csv')">CSV</button>
+                <button class="btn btn-outline-sm" (click)="exportCerts('excel')">Excel</button>
+                <button class="btn btn-outline-sm" (click)="exportCerts('pdf')">PDF</button>
+                <button class="btn btn-outline-sm" (click)="exportCerts('print')">Print</button>
+              </div>
+            </div>
+
+            <div class="filters-row">
+              <input type="text" class="form-control filter-input" [(ngModel)]="certsSearch" (input)="filterTeamCertificates()" placeholder="Search employee or certificate..." />
+              <select class="form-control filter-select" [(ngModel)]="certsStatusFilter" (change)="filterTeamCertificates()">
+                <option value="">All Statuses</option>
+                <option value="VERIFIED">Verified</option>
+                <option value="PENDING">Pending</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
+              <select class="form-control filter-select" [(ngModel)]="certsPageSize" (change)="resetCertsPagination()">
+                <option [value]="5">5 Entries</option>
+                <option [value]="10">10 Entries</option>
+                <option [value]="20">20 Entries</option>
+              </select>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th (click)="toggleCertsSort('employeeName')" style="cursor:pointer; user-select:none;">Employee <span class="material-icons sort-icon">swap_vert</span></th>
+                    <th (click)="toggleCertsSort('certificateName')" style="cursor:pointer; user-select:none;">Certificate Name <span class="material-icons sort-icon">swap_vert</span></th>
+                    <th (click)="toggleCertsSort('issuingOrganization')" style="cursor:pointer; user-select:none;">Issuer <span class="material-icons sort-icon">swap_vert</span></th>
+                    <th (click)="toggleCertsSort('issueDate')" style="cursor:pointer; user-select:none;">Issue Date <span class="material-icons sort-icon">swap_vert</span></th>
+                    <th (click)="toggleCertsSort('verificationStatus')" style="cursor:pointer; user-select:none;">Status <span class="material-icons sort-icon">swap_vert</span></th>
+                    <th>Download</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let item of paginatedTeamCerts">
+                    <td>{{ item.employee?.firstName }} {{ item.employee?.lastName }}</td>
+                    <td><strong>{{ item.certificateName }}</strong></td>
+                    <td>{{ item.issuingOrganization }}</td>
+                    <td>{{ item.issueDate | date }}</td>
+                    <td>
+                      <span class="badge" [ngClass]="{
+                        'badge-success': item.verificationStatus === 'VERIFIED',
+                        'badge-warning': item.verificationStatus === 'PENDING',
+                        'badge-error': item.verificationStatus === 'REJECTED'
+                      }">{{ item.verificationStatus }}</span>
+                    </td>
+                    <td>
+                      <a [href]="'http://localhost:5000/' + item.filePath" target="_blank" class="btn btn-outline-sm">Download</a>
+                    </td>
+                  </tr>
+                  <tr *ngIf="paginatedTeamCerts.length === 0">
+                    <td colspan="6" class="text-center text-muted">No certificates match the criteria.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="pagination-footer">
+              <span>Showing {{ paginatedTeamCerts.length }} of {{ filteredTeamCertificates.length }} entries</span>
+              <div class="pag-buttons">
+                <button class="btn btn-outline-sm" [disabled]="certsPage === 1" (click)="setCertsPage(certsPage - 1)">Previous</button>
+                <button class="btn btn-outline-sm" [disabled]="certsPage === totalCertsPages" (click)="setCertsPage(certsPage + 1)">Next</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================================================== -->
+        <!-- SUB-TAB 6: PROJECTS -->
+        <!-- ================================================== -->
+        <div *ngIf="activeSubTab === 'projects'" class="dashboard-card">
+          <div class="card-header border-b">
+            <h4>Team Project Assignments</h4>
+            <div class="export-actions">
+              <button class="btn btn-outline-sm" (click)="exportProjects('csv')">CSV</button>
+              <button class="btn btn-outline-sm" (click)="exportProjects('excel')">Excel</button>
+              <button class="btn btn-outline-sm" (click)="exportProjects('pdf')">PDF</button>
+              <button class="btn btn-outline-sm" (click)="exportProjects('print')">Print</button>
+            </div>
+          </div>
+
+          <div class="filters-row">
+            <input type="text" class="form-control filter-input" [(ngModel)]="projectsSearch" (input)="filterTeamProjects()" placeholder="Search project or role..." />
+            <select class="form-control filter-select" [(ngModel)]="projectsStatusFilter" (change)="filterTeamProjects()">
+              <option value="">All Statuses</option>
+              <option value="PLANNING">Planning</option>
+              <option value="ACTIVE">Active</option>
+              <option value="ON_HOLD">On Hold</option>
+              <option value="COMPLETED">Completed</option>
+            </select>
+            <select class="form-control filter-select" [(ngModel)]="projectsPageSize" (change)="resetProjectsPagination()">
+              <option [value]="5">5 Entries</option>
+              <option [value]="10">10 Entries</option>
+              <option [value]="20">20 Entries</option>
+            </select>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th (click)="toggleProjectsSort('name')" style="cursor:pointer; user-select:none;">Project Name <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleProjectsSort('projectCode')" style="cursor:pointer; user-select:none;">Code <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th>Client</th>
+                  <th (click)="toggleProjectsSort('status')" style="cursor:pointer; user-select:none;">Status <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th>Technologies Used</th>
+                  <th>Team Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let item of paginatedTeamProjects">
+                  <td><strong>{{ item.name }}</strong></td>
+                  <td><code>{{ item.projectCode }}</code></td>
+                  <td>{{ item.clientName || '—' }}</td>
+                  <td>
+                    <span class="badge" [ngClass]="{
+                      'badge-success': item.status === 'COMPLETED',
+                      'badge-info': item.status === 'ACTIVE',
+                      'badge-warning': item.status === 'PLANNING' || item.status === 'ON_HOLD'
+                    }">{{ item.status }}</span>
+                  </td>
+                  <td>{{ item.technologies || '—' }}</td>
+                  <td>{{ item.assignments?.length || 0 }} members</td>
+                </tr>
+                <tr *ngIf="paginatedTeamProjects.length === 0">
+                  <td colspan="6" class="text-center text-muted">No project assignments for your team.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="pagination-footer">
+            <span>Showing {{ paginatedTeamProjects.length }} of {{ filteredTeamProjects.length }} entries</span>
+            <div class="pag-buttons">
+              <button class="btn btn-outline-sm" [disabled]="projectsPage === 1" (click)="setProjectsPage(projectsPage - 1)">Previous</button>
+              <button class="btn btn-outline-sm" [disabled]="projectsPage === totalProjectsPages" (click)="setProjectsPage(projectsPage + 1)">Next</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================================================== -->
+        <!-- SUB-TAB 6.5: TEAM RESUMES -->
+        <!-- ================================================== -->
+        <div *ngIf="activeSubTab === 'resumes'" style="display:flex; flex-direction:column; gap:20px;">
           
-          <div class="ticket-meta-box">
-            <p><strong>Employee:</strong> {{ selectedTicket.creator?.firstName }} {{ selectedTicket.creator?.lastName }}</p>
-            <p><strong>Subject:</strong> {{ selectedTicket.subject }}</p>
-            <p><strong>Category:</strong> {{ selectedTicket.category }} | <strong>Priority:</strong> {{ selectedTicket.priority }}</p>
-            <p><strong>SLA Deadline:</strong> {{ selectedTicket.slaDueDate | date: 'short' }}</p>
-            <p><strong>Status:</strong> <span class="badge badge-info">{{ selectedTicket.status }}</span></p>
+          <!-- Team Resume Stats Overview -->
+          <div class="dashboard-card" id="teamResumeSummary" style="padding: 24px; position: relative;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:16px; flex-wrap:wrap; gap:16px;">
+              <div>
+                <h3 style="margin:0 0 4px; font-size:22px; color:var(--primary);">Team Resume & Capability Profile</h3>
+                <p style="margin:0; font-size:14px; color:var(--text-muted);">
+                  Manager: <strong>{{ teamSummaryData?.managerName }}</strong> · Department: <strong>{{ teamSummaryData?.department }}</strong>
+                </p>
+              </div>
+              <button class="btn btn-primary" (click)="downloadTeamResumePDF()">
+                <span class="material-icons" style="font-size:16px; margin-right:4px;">picture_as_pdf</span>
+                Download Team CV Summary
+              </button>
+            </div>
+
+            <!-- Dashboard Stats Grid -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:16px; margin-bottom:24px;">
+              <div style="padding:16px; background:var(--surface-hover); border-radius:10px; text-align:center; border:1px solid var(--border);">
+                <div style="font-size:24px; font-weight:800; color:var(--primary);">{{ teamSummaryData?.totalTeamMembers || 0 }}</div>
+                <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:600; margin-top:4px;">Team Members</div>
+              </div>
+              <div style="padding:16px; background:var(--surface-hover); border-radius:10px; text-align:center; border:1px solid var(--border);">
+                <div style="font-size:24px; font-weight:800; color:var(--secondary);">{{ teamSummaryData?.averageExperience || 0 }} yrs</div>
+                <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:600; margin-top:4px;">Avg Experience</div>
+              </div>
+              <div style="padding:16px; background:var(--surface-hover); border-radius:10px; text-align:center; border:1px solid var(--border);">
+                <div style="font-size:24px; font-weight:800; color:var(--accent);">{{ teamSummaryData?.activeProjects || 0 }}</div>
+                <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:600; margin-top:4px;">Active Projects</div>
+              </div>
+              <div style="padding:16px; background:var(--surface-hover); border-radius:10px; text-align:center; border:1px solid var(--border);">
+                <div style="font-size:24px; font-weight:800; color:var(--success);">{{ teamSummaryData?.trainingCompletionPercentage || 0 }}%</div>
+                <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:600; margin-top:4px;">Training Done</div>
+              </div>
+              <div style="padding:16px; background:var(--surface-hover); border-radius:10px; text-align:center; border:1px solid var(--border);">
+                <div style="font-size:24px; font-weight:800; color:var(--warning);">{{ teamSummaryData?.verifiedCertificates || 0 }}</div>
+                <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:600; margin-top:4px;">Verified Certs</div>
+              </div>
+            </div>
+
+            <!-- Top Skills & Tech Stack Dual Columns -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:20px;">
+              <div style="padding:20px; background:rgba(94,114,228,0.03); border:1px solid var(--border); border-radius:10px;">
+                <h5 style="margin:0 0 12px; font-size:13px; text-transform:uppercase; color:var(--primary); letter-spacing:0.5px;">Top Team Core Skills</h5>
+                <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                  <span *ngFor="let skill of teamSummaryData?.topSkills" style="padding:4px 12px; background:var(--surface-card); border:1px solid var(--border); border-radius:50px; font-size:12px; font-weight:600;">{{ skill }}</span>
+                  <span *ngIf="!teamSummaryData?.topSkills?.length" style="color:var(--text-muted); font-size:12px;">No approved skills yet.</span>
+                </div>
+              </div>
+              <div style="padding:20px; background:rgba(43,203,186,0.03); border:1px solid var(--border); border-radius:10px;">
+                <h5 style="margin:0 0 12px; font-size:13px; text-transform:uppercase; color:var(--secondary); letter-spacing:0.5px;">Main Technologies Used</h5>
+                <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                  <span *ngFor="let tech of teamSummaryData?.mainTechnologies" style="padding:4px 12px; background:var(--surface-card); border:1px solid var(--border); border-radius:50px; font-size:12px; font-weight:600; color:var(--secondary);">{{ tech }}</span>
+                  <span *ngIf="!teamSummaryData?.mainTechnologies?.length" style="color:var(--text-muted); font-size:12px;">No technologies mapped.</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <!-- Chat Timeline messages -->
-          <div class="messages-log">
-            <div class="msg-bubble system">
-              <p><strong>Issue Opened:</strong> {{ selectedTicket.description }}</p>
-              <span>{{ selectedTicket.createdAt | date: 'short' }}</span>
+          <!-- Filters and Team Members List -->
+          <div class="dashboard-card">
+            <div class="card-header border-b">
+              <h4>Direct Reports & Project Contributions</h4>
             </div>
-            <div *ngFor="let m of selectedTicket.messages" class="msg-bubble" 
-                 [ngClass]="{ 'self': m.senderId === currentUser.id, 'support': m.senderId !== currentUser.id }">
-              <p>{{ m.message }}</p>
-              <span>{{ m.createdAt | date: 'short' }}</span>
+
+            <!-- Filters Area -->
+            <div class="filters-row" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px; padding:16px 0;">
+              <input type="text" class="form-control" style="flex:1; min-width:200px;" [(ngModel)]="resumeSearchText" (input)="filterManagerTeam()" placeholder="Search employee..." />
+              <select class="form-control" style="width:160px;" [(ngModel)]="resumeSkillFilter" (change)="filterManagerTeam()">
+                <option value="">All Skills</option>
+                <option *ngFor="let sk of skillsList" [value]="sk.skillName">{{ sk.skillName }}</option>
+              </select>
+              <select class="form-control" style="width:160px;" [(ngModel)]="resumeProjectFilter" (change)="filterManagerTeam()">
+                <option value="">All Projects</option>
+                <option *ngFor="let prj of allTeamProjects" [value]="prj.name">{{ prj.name }}</option>
+              </select>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Experience</th>
+                    <th>Active Projects</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let member of paginatedManagerReports">
+                    <td><code>{{ member.employeeCode }}</code></td>
+                    <td><strong>{{ member.firstName }} {{ member.lastName }}</strong><br /><span style="font-size:11px; color:var(--text-muted);">{{ member.designation }}</span></td>
+                    <td>{{ member.email }}</td>
+                    <td>{{ member.yearsOfExperience }} yrs</td>
+                    <td>
+                      <div style="font-size:11px;">
+                        <div *ngFor="let assignment of getEmployeeActiveProjects(member.id)">
+                          • {{ assignment.projectName }} ({{ assignment.contributionPercent }}% - {{ assignment.role }})
+                        </div>
+                        <span *ngIf="!getEmployeeActiveProjects(member.id).length" class="text-muted">No active project assignments.</span>
+                      </div>
+                    </td>
+                    <td>
+                      <button class="btn btn-primary btn-sm" style="padding:4px 10px; font-size:12px; display:inline-flex; align-items:center; gap:4px;" (click)="viewMemberFullResume(member)">
+                        <span class="material-icons" style="font-size:13px;">description</span> View Resume
+                      </button>
+                    </td>
+                  </tr>
+                  <tr *ngIf="paginatedManagerReports.length === 0">
+                    <td colspan="6" class="text-center text-muted">No team members match the filters.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Paging footer -->
+            <div class="pagination-footer" style="display:flex; justify-content:space-between; align-items:center; padding-top:16px;">
+              <span>Showing {{ paginatedManagerReports.length }} of {{ filteredManagerReports.length }} team members</span>
+              <div class="pag-buttons" style="display:flex; gap:8px;">
+                <button class="btn btn-outline-sm" [disabled]="resumePage === 1" (click)="setResumePage(resumePage - 1)">Previous</button>
+                <button class="btn btn-outline-sm" [disabled]="resumePage === totalResumePages" (click)="setResumePage(resumePage + 1)">Next</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================================================== -->
+        <!-- SUB-TAB 7: TEAM SUPPORT HELPDESK QUEUE -->
+        <!-- ================================================== -->
+        <div *ngIf="activeSubTab === 'tickets'" style="display:flex; flex-direction:column; gap:20px;">
+          <div class="dashboard-card">
+            <h4>Team Support Helpdesk Queue</h4>
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Number</th>
+                    <th>Employee</th>
+                    <th>Subject</th>
+                    <th>Category</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngIf="teamTickets.length === 0">
+                    <td colspan="7" class="text-center text-muted">No team support tickets opened.</td>
+                  </tr>
+                  <tr *ngFor="let t of teamTickets">
+                    <td>{{ t.ticketNumber }}</td>
+                    <td>{{ t.employee ? t.employee.firstName + ' ' + t.employee.lastName : '—' }}</td>
+                    <td>{{ t.subject }}</td>
+                    <td>{{ t.category }}</td>
+                    <td>
+                      <span class="badge" [ngClass]="{
+                        'badge-error': t.priority === 'CRITICAL' || t.priority === 'HIGH',
+                        'badge-warning': t.priority === 'MEDIUM',
+                        'badge-info': t.priority === 'LOW'
+                      }">{{ t.priority }}</span>
+                    </td>
+                    <td>
+                      <span class="badge badge-info">{{ t.status }}</span>
+                    </td>
+                    <td>
+                      <button class="btn btn-outline-sm" (click)="viewTicketDetails(t)">View / Converse</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <!-- Reply and Actions panel -->
-          <div *ngIf="selectedTicket.status !== 'CLOSED' && selectedTicket.status !== 'RESOLVED'" class="reply-box" style="margin-top: 20px;">
-            <textarea class="form-control" [(ngModel)]="replyMessage" placeholder="Write a response message to employee..."></textarea>
-            <div class="form-row" style="margin-top: 10px; display: flex; gap: 10px;">
-              <button class="btn btn-primary" (click)="sendTicketReply()">Send Reply</button>
-              <button class="btn btn-secondary" (click)="resolveTeamTicket()">Resolve Ticket</button>
-              <button class="btn btn-error" (click)="escalateTeamTicket()">Escalate to Admin</button>
+          <!-- Active Support Chat dialog -->
+          <div class="dashboard-card flex-col" *ngIf="selectedTicket">
+            <div class="card-header border-b">
+              <h4>Converse Ticket: {{ selectedTicket.ticketNumber }}</h4>
+              <button class="btn btn-outline-sm" (click)="selectedTicket = null">Close Conversation</button>
+            </div>
+            
+            <div class="ticket-meta-box">
+              <p><strong>Employee:</strong> {{ selectedTicket.employee?.firstName }} {{ selectedTicket.employee?.lastName }}</p>
+              <p><strong>Subject:</strong> {{ selectedTicket.subject }}</p>
+              <p><strong>Category:</strong> {{ selectedTicket.category }} | <strong>Priority:</strong> {{ selectedTicket.priority }}</p>
+              <p><strong>SLA Deadline:</strong> {{ selectedTicket.slaDueDate | date: 'short' }}</p>
+              <p><strong>Status:</strong> <span class="badge badge-info">{{ selectedTicket.status }}</span></p>
+            </div>
+
+            <!-- Chat Timeline messages -->
+            <div class="messages-log">
+              <div class="msg-bubble system">
+                <p><strong>Issue Opened:</strong> {{ selectedTicket.description }}</p>
+                <span>{{ selectedTicket.createdAt | date: 'short' }}</span>
+              </div>
+              <div *ngFor="let m of selectedTicket.comments" class="msg-bubble" 
+                   [ngClass]="{ 'self': m.senderUserId === currentUser.id, 'support': m.senderUserId !== currentUser.id }">
+                <p><strong>{{ m.senderRole }}:</strong> {{ m.message }}</p>
+                <span>{{ m.createdAt | date: 'short' }}</span>
+              </div>
+            </div>
+
+            <!-- Reply and Actions panel -->
+            <div *ngIf="selectedTicket.status !== 'CLOSED' && selectedTicket.status !== 'RESOLVED'" class="reply-box" style="margin-top: 20px;">
+              <textarea class="form-control" [(ngModel)]="replyMessage" placeholder="Write a response message to employee..."></textarea>
+              <div class="form-row" style="margin-top: 10px; display: flex; gap: 10px;">
+                <button class="btn btn-primary" (click)="sendTicketReply()">Send Reply</button>
+                <button class="btn btn-secondary" (click)="resolveTeamTicket()">Resolve Ticket</button>
+                <button class="btn btn-error" (click)="escalateTeamTicket()">Escalate to Admin</button>
+              </div>
             </div>
           </div>
         </div>
@@ -407,33 +970,164 @@ import { Chart } from "chart.js/auto";
             </div>
 
             <!-- Resume Preview / Feedback Modal -->
-            <div *ngIf="activeModal === 'resumePreview'" class="resume-modal-body">
-              <div *ngIf="resumePreviewData; else loadingResume">
-                <div class="resume-header" style="display:flex; align-items:center; justify-content:space-between; gap:16px;">
-                  <div>
-                    <h3>{{ selectedResumeMember.firstName }} {{ selectedResumeMember.lastName }}</h3>
-                    <p>{{ selectedResumeMember.designation?.name }} · {{ selectedResumeMember.department?.name }}</p>
-                    <p>{{ selectedResumeMember.employeeCode }}</p>
+            <div *ngIf="activeModal === 'resumePreview'" class="resume-modal-body" style="max-height:80vh; overflow-y:auto; padding:10px;">
+              <div *ngIf="resumePreviewData; else loadingResume" style="display:flex; flex-direction:column; gap:24px;">
+                
+                <!-- Template Selection & Action toolbar -->
+                <div style="background:var(--surface-hover); border:1px solid var(--border); border-radius:10px; padding:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <label style="font-weight:600; font-size:13px; color:var(--text-secondary);">Template:</label>
+                    <select class="form-control" [(ngModel)]="resumeSettings.resumeTemplate" style="width:140px; padding:4px 8px;">
+                      <option value="minimalist">Minimalist</option>
+                      <option value="modern">Modern</option>
+                      <option value="classic">Classic</option>
+                      <option value="executive">Executive</option>
+                    </select>
+                    <label style="display:flex; align-items:center; gap:4px; font-size:12px; cursor:pointer; margin-left:8px;">
+                      <input type="checkbox" [(ngModel)]="resumeSettings.resumeHideContact" /> Hide contact
+                    </label>
+                    <label style="display:flex; align-items:center; gap:4px; font-size:12px; cursor:pointer;">
+                      <input type="checkbox" [(ngModel)]="resumeSettings.resumeHideRatings" /> Hide ratings
+                    </label>
                   </div>
-                  <div style="text-align:right;">
-                    <img *ngIf="resumePreviewData.employee.companyLogoUrl" [src]="resumePreviewData.employee.companyLogoUrl" alt="Company logo" style="max-height:60px; max-width:140px; object-fit:contain;" />
-                    <div *ngIf="resumePreviewData.employee.qrCodeUrl" style="margin-top:10px;">
-                      <img [src]="resumePreviewData.employee.qrCodeUrl" alt="QR Code" style="width:80px; height:80px;" />
+                  <div style="display:flex; gap:8px;">
+                    <button class="btn btn-primary btn-sm" (click)="downloadMemberResumePDF()">
+                      <span class="material-icons" style="font-size:14px; margin-right:4px;">picture_as_pdf</span> PDF
+                    </button>
+                    <button class="btn btn-outline-sm" (click)="printMemberResume()">
+                      <span class="material-icons" style="font-size:14px; margin-right:4px;">print</span> Print
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Printable Resume Area -->
+                <div class="resume-preview-card" [ngClass]="resumeSettings.resumeTemplate" id="resumePreviewWindow" style="background:#fff; border:1px solid var(--border); padding:32px; border-radius:8px; color:#1e293b;">
+                  <!-- Modern style (2 column) -->
+                  <div *ngIf="resumeSettings.resumeTemplate === 'modern'" style="display: grid; grid-template-columns: 240px 1fr; gap: 24px; margin: -32px; border-radius: 8px; overflow: hidden; min-height: 800px; text-align: left;">
+                    <div style="background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%); color: #ffffff; padding: 32px 20px; display: flex; flex-direction: column; gap: 20px;">
+                      <div style="text-align: center;">
+                        <div *ngIf="resumePreviewData.employee.profileImage" style="margin-bottom:12px;">
+                          <img [src]="resumePreviewData.employee.profileImage" style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:2px solid var(--primary);" alt="Profile" />
+                        </div>
+                        <h3 style="color:#fff; margin:0 0 4px; font-size:18px;">{{ resumePreviewData.employee.firstName }} {{ resumePreviewData.employee.lastName }}</h3>
+                        <p style="color:#a5b4fc; margin:0; font-size:12px; font-weight:600;">{{ resumePreviewData.employee.designation }}</p>
+                      </div>
+
+                      <div *ngIf="!resumeSettings.resumeHideContact" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px;">
+                        <h5 style="color:#818cf8; text-transform:uppercase; font-size:10px; letter-spacing:1px; margin:0 0 8px;">Contact</h5>
+                        <div style="font-size:11px; color:#cbd5e1; display:flex; flex-direction:column; gap:6px;">
+                          <div>{{ resumePreviewData.employee.email }}</div>
+                          <div *ngIf="resumePreviewData.employee.phone">{{ resumePreviewData.employee.phone }}</div>
+                          <div>{{ resumePreviewData.employee.workLocation }}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style="padding: 32px 24px; display:flex; flex-direction:column; gap:20px;">
+                      <!-- Professional Summary -->
+                      <div *ngIf="resumePreviewData.employee.autoSummary">
+                        <h4 style="margin:0 0 8px; color:var(--primary); text-transform:uppercase; font-size:11px; border-bottom:2px solid var(--primary); padding-bottom:4px;">Professional Summary</h4>
+                        <p style="font-size:12px; color:#475569; line-height:1.6; font-style:italic;">{{ resumePreviewData.employee.autoSummary }}</p>
+                      </div>
+                      
+                      <!-- Education -->
+                      <div *ngIf="resumePreviewData.employee.education">
+                        <h4 style="margin:0 0 8px; color:var(--primary); text-transform:uppercase; font-size:11px; border-bottom:2px solid var(--primary); padding-bottom:4px;">Education</h4>
+                        <p style="font-size:12px; color:#475569;">{{ resumePreviewData.employee.education }}</p>
+                      </div>
+
+                      <!-- Skills -->
+                      <div *ngIf="resumePreviewData.skills?.length">
+                        <h4 style="margin:0 0 8px; color:var(--primary); text-transform:uppercase; font-size:11px; border-bottom:2px solid var(--primary); padding-bottom:4px;">Skills</h4>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:6px;">
+                          <div *ngFor="let s of resumePreviewData.skills" style="font-size:11px; font-weight:600; background:#f1f5f9; padding:4px 8px; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">
+                            <span>{{ s.name }}</span>
+                            <span *ngIf="!resumeSettings.resumeHideRatings" style="color:var(--primary);">★{{ s.finalRating || s.selfRating }}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Projects -->
+                      <div *ngIf="resumePreviewData.projects?.length">
+                        <h4 style="margin:0 0 8px; color:var(--primary); text-transform:uppercase; font-size:11px; border-bottom:2px solid var(--primary); padding-bottom:4px;">Projects</h4>
+                        <div *ngFor="let p of resumePreviewData.projects" style="font-size:12px; margin-bottom:8px;">
+                          <strong>{{ p.name }}</strong> ({{ p.role }})
+                          <p style="font-size:11px; color:#64748b; margin:2px 0 0;">{{ p.responsibilities }}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Standard Styles (Minimalist, Classic, Executive) -->
+                  <div *ngIf="resumeSettings.resumeTemplate !== 'modern'" style="text-align: left;">
+                    <div style="display:flex; justify-content:space-between; border-bottom:2px solid var(--primary); padding-bottom:16px; margin-bottom:16px;">
+                      <div>
+                        <h2 style="margin:0; font-size:22px; color:#0f172a;">{{ resumePreviewData.employee.firstName }} {{ resumePreviewData.employee.lastName }}</h2>
+                        <p style="margin:4px 0 0; color:var(--primary); font-weight:600;">{{ resumePreviewData.employee.designation }} · {{ resumePreviewData.employee.department }}</p>
+                      </div>
+                      <div *ngIf="!resumeSettings.resumeHideContact" style="text-align:right; font-size:11px; color:#475569;">
+                        <div>{{ resumePreviewData.employee.email }}</div>
+                        <div>{{ resumePreviewData.employee.phone }}</div>
+                        <div>{{ resumePreviewData.employee.workLocation }}</div>
+                      </div>
+                    </div>
+
+                    <!-- Auto-Summary -->
+                    <div *ngIf="resumePreviewData.employee.autoSummary" style="margin-bottom:16px;">
+                      <h4 style="margin:0 0 4px; color:var(--primary); text-transform:uppercase; font-size:11px; letter-spacing:1px;">Professional Summary</h4>
+                      <p style="font-size:12px; color:#334155; line-height:1.6; font-style:italic;">{{ resumePreviewData.employee.autoSummary }}</p>
+                    </div>
+
+                    <!-- Skills -->
+                    <div *ngIf="resumePreviewData.skills?.length" style="margin-bottom:16px;">
+                      <h4 style="margin:0 0 6px; color:var(--primary); text-transform:uppercase; font-size:11px; letter-spacing:1px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">Skills</h4>
+                      <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                        <span *ngFor="let s of resumePreviewData.skills" style="font-size:11px; padding:4px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px;">
+                          {{ s.name }} <span *ngIf="!resumeSettings.resumeHideRatings" style="color:var(--primary);">★{{ s.finalRating || s.selfRating }}</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    <!-- Projects -->
+                    <div *ngIf="resumePreviewData.projects?.length" style="margin-bottom:16px;">
+                      <h4 style="margin:0 0 6px; color:var(--primary); text-transform:uppercase; font-size:11px; letter-spacing:1px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">Projects</h4>
+                      <div *ngFor="let p of resumePreviewData.projects" style="margin-bottom:10px; font-size:12px;">
+                        <div style="display:flex; justify-content:space-between; font-weight:600;">
+                          <span>{{ p.name }} - {{ p.role }}</span>
+                          <span style="color:#64748b;">{{ p.startDate | date:'MMM y' }} - {{ p.endDate ? (p.endDate | date:'MMM y') : 'Present' }}</span>
+                        </div>
+                        <p style="margin:2px 0 0; color:#475569; font-size:11px;">{{ p.responsibilities }}</p>
+                      </div>
+                    </div>
+
+                    <!-- Education -->
+                    <div *ngIf="resumePreviewData.employee.education" style="margin-bottom:16px;">
+                      <h4 style="margin:0 0 6px; color:var(--primary); text-transform:uppercase; font-size:11px; letter-spacing:1px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">Education</h4>
+                      <p style="font-size:12px; color:#334155; margin:0;">{{ resumePreviewData.employee.education }}</p>
+                    </div>
+
+                    <!-- Trainings & Certificates -->
+                    <div *ngIf="resumePreviewData.trainings?.length || resumePreviewData.certificates?.length" style="margin-bottom:16px;">
+                      <h4 style="margin:0 0 6px; color:var(--primary); text-transform:uppercase; font-size:11px; letter-spacing:1px; border-bottom:1px solid #e2e8f0; padding-bottom:4px;">Trainings & Certifications</h4>
+                      <div *ngFor="let t of resumePreviewData.trainings" style="font-size:11px; margin-bottom:4px; display:flex; justify-content:space-between;">
+                        <span><strong>{{ t.title }}</strong> - {{ t.provider }}</span>
+                        <span style="color:#64748b;">{{ t.completionDate | date:'MMM y' }}</span>
+                      </div>
+                      <div *ngFor="let c of resumePreviewData.certificates" style="font-size:11px; margin-bottom:4px; display:flex; justify-content:space-between;">
+                        <span><strong>{{ c.name }}</strong> - {{ c.issuer }}</span>
+                        <span style="color:#64748b;">{{ c.issueDate | date:'MMM y' }}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div style="margin-top:16px; display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px;">
-                  <div><strong>Email</strong><br />{{ resumePreviewData.employee.email }}</div>
-                  <div><strong>Phone</strong><br />{{ resumePreviewData.employee.phone || '—' }}</div>
-                  <div><strong>Location</strong><br />{{ resumePreviewData.employee.workLocation || '—' }}</div>
-                  <div><strong>Experience</strong><br />{{ resumePreviewData.employee.yearsOfExperience }} years</div>
+
+                <!-- Feedback Suggestions Form -->
+                <div style="background:var(--surface-hover); border:1px solid var(--border); border-radius:10px; padding:20px;">
+                  <h4 style="margin-top:0;">Provide Improvement Suggestions for this CV</h4>
+                  <textarea class="form-control" [(ngModel)]="resumeFeedbackText" rows="4" placeholder="Enter specific layout, objective, or summary suggestions for the employee to review..." style="width:100%; margin-bottom:12px;"></textarea>
+                  <div *ngIf="actionError" class="error-banner" style="margin-bottom:12px;">{{ actionError }}</div>
+                  <button class="btn btn-primary w-full" (click)="submitResumeFeedback()">Submit Suggestions</button>
                 </div>
-                <div style="margin-top:16px;">
-                  <h4>Latest Feedback</h4>
-                  <textarea class="form-control" [(ngModel)]="resumeFeedbackText" rows="4" placeholder="Provide improvement suggestions for this resume."></textarea>
-                </div>
-                <div *ngIf="actionError" class="error-banner">{{ actionError }}</div>
-                <button class="btn btn-primary w-full" (click)="submitResumeFeedback()">Submit Resume Suggestions</button>
               </div>
               <ng-template #loadingResume>
                 <p>Loading resume preview...</p>
@@ -561,8 +1255,9 @@ import { Chart } from "chart.js/auto";
     .w-full { width: 100%; }
   `],
 })
-export class ManagerDashboardComponent implements OnInit, AfterViewInit {
+export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   activeMasterTab: "team" | "development" = "team";
+  activeSubTab: 'profiles' | 'skills' | 'gaps' | 'training' | 'certificates' | 'projects' | 'tickets' | 'resumes' = 'profiles';
   currentUser: any;
   stats: any;
 
@@ -576,7 +1271,78 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   skillsList: any[] = [];
   teamSubmissions: any[] = [];
 
-  // Table advanced filters
+  // Sub tab: Skills
+  allTeamSkills: any[] = [];
+  filteredTeamSkills: any[] = [];
+  paginatedTeamSkills: any[] = [];
+  skillsPage = 1;
+  skillsPageSize = 10;
+  totalSkillsPages = 1;
+  skillsSearch = '';
+  skillsStatusFilter = '';
+  skillsSortField = 'employeeName';
+  skillsSortOrder: 'asc' | 'desc' = 'asc';
+
+  // Sub tab: Gaps
+  teamGaps: any[] = [];
+  filteredTeamGaps: any[] = [];
+  paginatedTeamGaps: any[] = [];
+  gapsPage = 1;
+  gapsPageSize = 10;
+  totalGapsPages = 1;
+  gapsSearch = '';
+  gapsSortField = 'gap';
+  gapsSortOrder: 'asc' | 'desc' = 'desc';
+
+  // Sub tab: Resumes
+  teamSummaryData: any;
+  resumeSearchText = "";
+  resumeSkillFilter = "";
+  resumeProjectFilter = "";
+  resumePage = 1;
+  resumePageSize = 10;
+  totalResumePages = 1;
+  filteredManagerReports: any[] = [];
+  paginatedManagerReports: any[] = [];
+  resumeSettings = { resumeTemplate: 'minimalist', resumeHideContact: false, resumeHideRatings: false };
+
+  // Sub tab: Trainings
+  allTeamTrainings: any[] = [];
+  filteredTeamTrainings: any[] = [];
+  paginatedTeamTrainings: any[] = [];
+  trainingsPage = 1;
+  trainingsPageSize = 10;
+  totalTrainingsPages = 1;
+  trainingsSearch = '';
+  trainingsStatusFilter = '';
+  trainingsSortField = 'dueDate';
+  trainingsSortOrder: 'asc' | 'desc' = 'asc';
+
+  // Sub tab: Certificates
+  allTeamCertificates: any[] = [];
+  filteredTeamCertificates: any[] = [];
+  paginatedTeamCerts: any[] = [];
+  certsPage = 1;
+  certsPageSize = 10;
+  totalCertsPages = 1;
+  certsSearch = '';
+  certsStatusFilter = '';
+  certsSortField = 'issueDate';
+  certsSortOrder: 'asc' | 'desc' = 'desc';
+
+  // Sub tab: Projects
+  allTeamProjects: any[] = [];
+  filteredTeamProjects: any[] = [];
+  paginatedTeamProjects: any[] = [];
+  projectsPage = 1;
+  projectsPageSize = 10;
+  totalProjectsPages = 1;
+  projectsSearch = '';
+  projectsStatusFilter = '';
+  projectsSortField = 'name';
+  projectsSortOrder: 'asc' | 'desc' = 'asc';
+
+  // Table advanced filters for profiles
   searchQuery = "";
   codeFilter = "";
   nameFilter = "";
@@ -615,10 +1381,13 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   gapChart: any;
   progressChart: any;
 
+  private routeSub!: Subscription;
+
   constructor(
     private fb: FormBuilder,
     private dataService: DataService,
-    private authService: AuthService
+    private authService: AuthService,
+    private router: Router
   ) {}
 
   ngOnInit() {
@@ -627,6 +1396,39 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     this.loadTeamData();
     this.initializeForms();
     this.loadFormContexts();
+
+    // Route tracking
+    this.setTabFromUrl(this.router.url);
+    this.routeSub = this.router.events
+      .pipe(filter((e) => e instanceof NavigationEnd))
+      .subscribe((e: any) => this.setTabFromUrl(e.urlAfterRedirects));
+  }
+
+  ngOnDestroy() {
+    if (this.routeSub) {
+      this.routeSub.unsubscribe();
+    }
+  }
+
+  setTabFromUrl(url: string) {
+    const base = url.split("?")[0];
+    if (base === "/manager/profile") {
+      this.activeMasterTab = "development";
+    } else {
+      this.activeMasterTab = "team";
+      const subTabMap: Record<string, any> = {
+        "/manager/dashboard": "profiles",
+        "/manager/team": "profiles",
+        "/manager/reviews": "skills",
+        "/manager/training": "training",
+        "/manager/projects": "projects",
+        "/manager/resumes": "resumes"
+      };
+      this.activeSubTab = subTabMap[base] || "profiles";
+      if (this.activeSubTab === "resumes") {
+        this.loadTeamSummary();
+      }
+    }
   }
 
   ngAfterViewInit() {
@@ -664,24 +1466,58 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
   }
 
   loadQueues(teamIds: string[]) {
-    // 1. Fetch assessments matching team IDs
-    this.dataService.getSkills({ status: "SUBMITTED", limit: 100 }).subscribe((res) => {
-      this.pendingAssessments = res.data.filter((item: any) => teamIds.includes(item.employeeId));
+    if (teamIds.length === 0) {
+      this.pendingAssessments = [];
+      this.allTeamSkills = [];
+      this.filterTeamSkills();
+      this.calculateTeamGaps();
+      return;
+    }
+
+    // 1. Fetch assessments matching team IDs (by calling getSkills for each member to force employee skill mapping)
+    const skillObs = teamIds.map(id => this.dataService.getSkills({ employeeId: id, limit: 100 }));
+    forkJoin(skillObs).subscribe((results: any[]) => {
+      const merged: any[] = [];
+      results.forEach(res => {
+        if (res && res.data) {
+          merged.push(...res.data);
+        }
+      });
+      this.pendingAssessments = merged.filter((item: any) => item.status === "SUBMITTED");
+      this.allTeamSkills = merged;
+      this.filterTeamSkills();
+      this.calculateTeamGaps();
     });
 
-    // 2. Fetch pending certs matching team IDs
-    this.dataService.getCertificates({ verificationStatus: "PENDING", limit: 100 }).subscribe((res) => {
-      this.pendingCertificates = res.data.filter((item: any) => teamIds.includes(item.employeeId));
+    // 2. Fetch certificates matching team IDs
+    this.dataService.getCertificates({ limit: 500 }).subscribe((res) => {
+      this.pendingCertificates = res.data.filter((item: any) => teamIds.includes(item.employeeId) && item.verificationStatus === "PENDING");
+      this.allTeamCertificates = res.data.filter((item: any) => teamIds.includes(item.employeeId));
+      this.filterTeamCertificates();
     });
 
     // 3. Fetch team tickets
-    this.dataService.getTickets({ limit: 100 }).subscribe((res) => {
-      this.teamTickets = res.data.filter((t: any) => teamIds.includes(t.creatorId));
+    this.dataService.getTickets({ limit: 500 }).subscribe((res) => {
+      this.teamTickets = res.data.filter((t: any) => teamIds.includes(t.creatorId) || teamIds.includes(t.employeeId));
     });
 
     // 4. Fetch team assessment attempts
     this.dataService.getAllSubmissions().subscribe((res) => {
-      this.teamSubmissions = res.data;
+      this.teamSubmissions = res.data.filter((sub: any) => teamIds.includes(sub.employeeId));
+    });
+
+    // 5. Fetch team trainings
+    this.dataService.getTrainingPlans({ limit: 500 }).subscribe((res) => {
+      this.allTeamTrainings = res.data.filter((item: any) => teamIds.includes(item.employeeId));
+      this.filterTeamTrainings();
+    });
+
+    // 6. Fetch team projects
+    this.dataService.getProjects({ limit: 500 }).subscribe((res) => {
+      this.allTeamProjects = res.data.filter((p: any) =>
+        p.assignments?.some((a: any) => teamIds.includes(a.employeeId))
+      );
+      this.filterTeamProjects();
     });
   }
 
@@ -789,8 +1625,439 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     this.calculatePagination();
   }
 
+  setSubTab(tab: any) {
+    this.activeSubTab = tab;
+    const tabRouteMap: Record<string, string> = {
+      profiles: "/manager/team",
+      skills: "/manager/reviews",
+      training: "/manager/training",
+      projects: "/manager/projects",
+      resumes: "/manager/resumes"
+    };
+    if (tab === 'resumes') {
+      this.loadTeamSummary();
+    }
+    const route = tabRouteMap[tab];
+    if (route) {
+      this.router.navigate([route]);
+    }
+  }
+
   // ----------------------------------------------------
-  // CSV, Excel, Print Actions
+  // Sub tab Skills filtering & pagination
+  // ----------------------------------------------------
+  filterTeamSkills() {
+    let list = [...this.allTeamSkills];
+    if (this.skillsSearch.trim()) {
+      const q = this.skillsSearch.toLowerCase();
+      list = list.filter(item =>
+        (item.employee?.firstName + ' ' + item.employee?.lastName).toLowerCase().includes(q) ||
+        item.skill?.skillName?.toLowerCase().includes(q)
+      );
+    }
+    if (this.skillsStatusFilter) {
+      list = list.filter(item => item.status === this.skillsStatusFilter);
+    }
+    // Sort
+    list.sort((a, b) => {
+      let valA = a[this.skillsSortField];
+      let valB = b[this.skillsSortField];
+      if (this.skillsSortField === 'employeeName') {
+        valA = (a.employee?.firstName || '') + ' ' + (a.employee?.lastName || '');
+        valB = (b.employee?.firstName || '') + ' ' + (b.employee?.lastName || '');
+      } else if (this.skillsSortField === 'skillName') {
+        valA = a.skill?.skillName || '';
+        valB = b.skill?.skillName || '';
+      }
+      if (typeof valA === 'string') {
+        return this.skillsSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      } else {
+        return this.skillsSortOrder === 'asc' ? valA - valB : valB - valA;
+      }
+    });
+    this.filteredTeamSkills = list;
+    this.resetSkillsPagination();
+  }
+
+  toggleSkillsSort(field: string) {
+    if (this.skillsSortField === field) {
+      this.skillsSortOrder = this.skillsSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.skillsSortField = field;
+      this.skillsSortOrder = 'asc';
+    }
+    this.filterTeamSkills();
+  }
+
+  resetSkillsPagination() {
+    this.skillsPage = 1;
+    this.calculateSkillsPagination();
+  }
+
+  calculateSkillsPagination() {
+    this.totalSkillsPages = Math.ceil(this.filteredTeamSkills.length / Number(this.skillsPageSize)) || 1;
+    const startIdx = (this.skillsPage - 1) * Number(this.skillsPageSize);
+    this.paginatedTeamSkills = this.filteredTeamSkills.slice(startIdx, startIdx + Number(this.skillsPageSize));
+  }
+
+  setSkillsPage(page: number) {
+    this.skillsPage = page;
+    this.calculateSkillsPagination();
+  }
+
+  exportSkills(type: string) {
+    const headers = ["Employee Code", "Employee Name", "Skill Name", "Self Rating", "Final Rating", "Status"];
+    const rows = this.filteredTeamSkills.map(item => [
+      item.employee?.employeeCode,
+      `${item.employee?.firstName} ${item.employee?.lastName}`,
+      item.skill?.skillName,
+      item.selfRating,
+      item.status === 'APPROVED' ? item.finalRating : '—',
+      item.status
+    ]);
+    if (type === 'csv') exportToCsv(headers, rows, "Team_Skills_Matrix");
+    else if (type === 'excel') exportToExcel(headers, rows, "Team_Skills_Matrix");
+    else if (type === 'pdf') exportToPdf(headers, rows, "Team_Skills_Matrix");
+    else if (type === 'print') printTable(headers, rows, "Team Skills Matrix - SkillSphere");
+  }
+
+  // ----------------------------------------------------
+  // Sub tab Gaps filtering & pagination
+  // ----------------------------------------------------
+  calculateTeamGaps() {
+    const gaps: any[] = [];
+    this.teamMembers.forEach(emp => {
+      const requiredSkills = emp.designation?.skillRequirements || [];
+      const empSkills = this.allTeamSkills.filter(s => s.employeeId === emp.id);
+      const skillMap = new Map(empSkills.map(s => [s.skillId, s]));
+
+      requiredSkills.forEach((req: any) => {
+        const empSkill = skillMap.get(req.skillId);
+        const currentLevel = empSkill && empSkill.status === 'APPROVED' ? empSkill.finalRating : 0;
+        const gap = req.requiredLevel - currentLevel;
+        if (gap > 0) {
+          gaps.push({
+            employeeId: emp.id,
+            employeeCode: emp.employeeCode,
+            employeeName: `${emp.firstName} ${emp.lastName}`,
+            skillId: req.skillId,
+            skillName: req.skill?.skillName || 'Unknown Skill',
+            requiredLevel: req.requiredLevel,
+            currentLevel,
+            gap,
+            priority: gap >= 3 ? 'CRITICAL' : gap >= 2 ? 'HIGH' : 'MEDIUM'
+          });
+        }
+      });
+    });
+    this.teamGaps = gaps;
+    this.filterTeamGaps();
+  }
+
+  filterTeamGaps() {
+    let list = [...this.teamGaps];
+    if (this.gapsSearch.trim()) {
+      const q = this.gapsSearch.toLowerCase();
+      list = list.filter(item =>
+        item.employeeName.toLowerCase().includes(q) ||
+        item.skillName.toLowerCase().includes(q)
+      );
+    }
+    // Sort
+    list.sort((a, b) => {
+      let valA = a[this.gapsSortField];
+      let valB = b[this.gapsSortField];
+      if (typeof valA === 'string') {
+        return this.gapsSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      } else {
+        return this.gapsSortOrder === 'asc' ? valA - valB : valB - valA;
+      }
+    });
+    this.filteredTeamGaps = list;
+    this.resetGapsPagination();
+  }
+
+  toggleGapsSort(field: string) {
+    if (this.gapsSortField === field) {
+      this.gapsSortOrder = this.gapsSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.gapsSortField = field;
+      this.gapsSortOrder = 'asc';
+    }
+    this.filterTeamGaps();
+  }
+
+  resetGapsPagination() {
+    this.gapsPage = 1;
+    this.calculateGapsPagination();
+  }
+
+  calculateGapsPagination() {
+    this.totalGapsPages = Math.ceil(this.filteredTeamGaps.length / Number(this.gapsPageSize)) || 1;
+    const startIdx = (this.gapsPage - 1) * Number(this.gapsPageSize);
+    this.paginatedTeamGaps = this.filteredTeamGaps.slice(startIdx, startIdx + Number(this.gapsPageSize));
+  }
+
+  setGapsPage(page: number) {
+    this.gapsPage = page;
+    this.calculateGapsPagination();
+  }
+
+  quickAssignTraining(item: any) {
+    this.openModal('assignTraining');
+    this.trainingForm.patchValue({
+      employeeId: item.employeeId,
+      skillId: item.skillId,
+      trainingTitle: `Accelerated Skill Path: ${item.skillName}`,
+      trainingCode: `TR-PATH-${Math.floor(100 + Math.random() * 900)}`
+    });
+  }
+
+  exportGaps(type: string) {
+    const headers = ["Employee Name", "Target Skill", "Required Rating", "Current Rating", "Gap Difference", "Priority"];
+    const rows = this.filteredTeamGaps.map(item => [
+      item.employeeName,
+      item.skillName,
+      `Level ${item.requiredLevel}`,
+      `Level ${item.currentLevel}`,
+      `+${item.gap}`,
+      item.priority
+    ]);
+    if (type === 'csv') exportToCsv(headers, rows, "Team_Skill_Gaps");
+    else if (type === 'excel') exportToExcel(headers, rows, "Team_Skill_Gaps");
+    else if (type === 'pdf') exportToPdf(headers, rows, "Team_Skill_Gaps");
+    else if (type === 'print') printTable(headers, rows, "Team Skill Gaps Report");
+  }
+
+  // ----------------------------------------------------
+  // Sub tab Trainings filtering & pagination
+  // ----------------------------------------------------
+  filterTeamTrainings() {
+    let list = [...this.allTeamTrainings];
+    if (this.trainingsSearch.trim()) {
+      const q = this.trainingsSearch.toLowerCase();
+      list = list.filter(item =>
+        (item.employee?.firstName + ' ' + item.employee?.lastName).toLowerCase().includes(q) ||
+        item.trainingTitle?.toLowerCase().includes(q)
+      );
+    }
+    if (this.trainingsStatusFilter) {
+      list = list.filter(item => item.status === this.trainingsStatusFilter);
+    }
+    // Sort
+    list.sort((a, b) => {
+      let valA = a[this.trainingsSortField];
+      let valB = b[this.trainingsSortField];
+      if (this.trainingsSortField === 'employeeName') {
+        valA = (a.employee?.firstName || '') + ' ' + (a.employee?.lastName || '');
+        valB = (b.employee?.firstName || '') + ' ' + (b.employee?.lastName || '');
+      }
+      if (valA === undefined || valA === null) valA = '';
+      if (valB === undefined || valB === null) valB = '';
+      if (typeof valA === 'string') {
+        return this.trainingsSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      } else {
+        return this.trainingsSortOrder === 'asc' ? valA - valB : valB - valA;
+      }
+    });
+    this.filteredTeamTrainings = list;
+    this.resetTrainingsPagination();
+  }
+
+  toggleTrainingsSort(field: string) {
+    if (this.trainingsSortField === field) {
+      this.trainingsSortOrder = this.trainingsSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.trainingsSortField = field;
+      this.trainingsSortOrder = 'asc';
+    }
+    this.filterTeamTrainings();
+  }
+
+  resetTrainingsPagination() {
+    this.trainingsPage = 1;
+    this.calculateTrainingsPagination();
+  }
+
+  calculateTrainingsPagination() {
+    this.totalTrainingsPages = Math.ceil(this.filteredTeamTrainings.length / Number(this.trainingsPageSize)) || 1;
+    const startIdx = (this.trainingsPage - 1) * Number(this.trainingsPageSize);
+    this.paginatedTeamTrainings = this.filteredTeamTrainings.slice(startIdx, startIdx + Number(this.trainingsPageSize));
+  }
+
+  setTrainingsPage(page: number) {
+    this.trainingsPage = page;
+    this.calculateTrainingsPagination();
+  }
+
+  exportTrainings(type: string) {
+    const headers = ["Employee Name", "Course Title", "Skill Target", "Due Date", "Progress", "Status"];
+    const rows = this.filteredTeamTrainings.map(item => [
+      `${item.employee?.firstName} ${item.employee?.lastName}`,
+      item.trainingTitle,
+      item.skill?.skillName,
+      new Date(item.dueDate).toLocaleDateString(),
+      `${item.progress}%`,
+      item.status
+    ]);
+    if (type === 'csv') exportToCsv(headers, rows, "Team_Trainings");
+    else if (type === 'excel') exportToExcel(headers, rows, "Team_Trainings");
+    else if (type === 'pdf') exportToPdf(headers, rows, "Team_Trainings");
+    else if (type === 'print') printTable(headers, rows, "Team Trainings Report");
+  }
+
+  // ----------------------------------------------------
+  // Sub tab Certificates filtering & pagination
+  // ----------------------------------------------------
+  filterTeamCertificates() {
+    let list = [...this.allTeamCertificates];
+    if (this.certsSearch.trim()) {
+      const q = this.certsSearch.toLowerCase();
+      list = list.filter(item =>
+        (item.employee?.firstName + ' ' + item.employee?.lastName).toLowerCase().includes(q) ||
+        item.certificateName?.toLowerCase().includes(q)
+      );
+    }
+    if (this.certsStatusFilter) {
+      list = list.filter(item => item.verificationStatus === this.certsStatusFilter);
+    }
+    // Sort
+    list.sort((a, b) => {
+      let valA = a[this.certsSortField];
+      let valB = b[this.certsSortField];
+      if (this.certsSortField === 'employeeName') {
+        valA = (a.employee?.firstName || '') + ' ' + (a.employee?.lastName || '');
+        valB = (b.employee?.firstName || '') + ' ' + (b.employee?.lastName || '');
+      }
+      if (valA === undefined || valA === null) valA = '';
+      if (valB === undefined || valB === null) valB = '';
+      if (typeof valA === 'string') {
+        return this.certsSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      } else {
+        return this.certsSortOrder === 'asc' ? valA - valB : valB - valA;
+      }
+    });
+    this.filteredTeamCertificates = list;
+    this.resetCertsPagination();
+  }
+
+  toggleCertsSort(field: string) {
+    if (this.certsSortField === field) {
+      this.certsSortOrder = this.certsSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.certsSortField = field;
+      this.certsSortOrder = 'asc';
+    }
+    this.filterTeamCertificates();
+  }
+
+  resetCertsPagination() {
+    this.certsPage = 1;
+    this.calculateCertsPagination();
+  }
+
+  calculateCertsPagination() {
+    this.totalCertsPages = Math.ceil(this.filteredTeamCertificates.length / Number(this.certsPageSize)) || 1;
+    const startIdx = (this.certsPage - 1) * Number(this.certsPageSize);
+    this.paginatedTeamCerts = this.filteredTeamCertificates.slice(startIdx, startIdx + Number(this.certsPageSize));
+  }
+
+  setCertsPage(page: number) {
+    this.certsPage = page;
+    this.calculateCertsPagination();
+  }
+
+  exportCerts(type: string) {
+    const headers = ["Employee Name", "Certificate Name", "Issuer Organization", "Issue Date", "Status"];
+    const rows = this.filteredTeamCertificates.map(item => [
+      `${item.employee?.firstName} ${item.employee?.lastName}`,
+      item.certificateName,
+      item.issuingOrganization,
+      new Date(item.issueDate).toLocaleDateString(),
+      item.verificationStatus
+    ]);
+    if (type === 'csv') exportToCsv(headers, rows, "Team_Certificates");
+    else if (type === 'excel') exportToExcel(headers, rows, "Team_Certificates");
+    else if (type === 'pdf') exportToPdf(headers, rows, "Team_Certificates");
+    else if (type === 'print') printTable(headers, rows, "Team Certificates Inventory");
+  }
+
+  // ----------------------------------------------------
+  // Sub tab Projects filtering & pagination
+  // ----------------------------------------------------
+  filterTeamProjects() {
+    let list = [...this.allTeamProjects];
+    if (this.projectsSearch.trim()) {
+      const q = this.projectsSearch.toLowerCase();
+      list = list.filter(item =>
+        item.name?.toLowerCase().includes(q) ||
+        item.projectCode?.toLowerCase().includes(q) ||
+        item.technologies?.toLowerCase().includes(q)
+      );
+    }
+    if (this.projectsStatusFilter) {
+      list = list.filter(item => item.status === this.projectsStatusFilter);
+    }
+    // Sort
+    list.sort((a, b) => {
+      let valA = a[this.projectsSortField];
+      let valB = b[this.projectsSortField];
+      if (valA === undefined || valA === null) valA = '';
+      if (valB === undefined || valB === null) valB = '';
+      if (typeof valA === 'string') {
+        return this.projectsSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      } else {
+        return this.projectsSortOrder === 'asc' ? valA - valB : valB - valA;
+      }
+    });
+    this.filteredTeamProjects = list;
+    this.resetProjectsPagination();
+  }
+
+  toggleProjectsSort(field: string) {
+    if (this.projectsSortField === field) {
+      this.projectsSortOrder = this.projectsSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.projectsSortField = field;
+      this.projectsSortOrder = 'asc';
+    }
+    this.filterTeamProjects();
+  }
+
+  resetProjectsPagination() {
+    this.projectsPage = 1;
+    this.calculateProjectsPagination();
+  }
+
+  calculateProjectsPagination() {
+    this.totalProjectsPages = Math.ceil(this.filteredTeamProjects.length / Number(this.projectsPageSize)) || 1;
+    const startIdx = (this.projectsPage - 1) * Number(this.projectsPageSize);
+    this.paginatedTeamProjects = this.filteredTeamProjects.slice(startIdx, startIdx + Number(this.projectsPageSize));
+  }
+
+  setProjectsPage(page: number) {
+    this.projectsPage = page;
+    this.calculateProjectsPagination();
+  }
+
+  exportProjects(type: string) {
+    const headers = ["Project Code", "Project Name", "Client", "Status", "Technologies", "Team Allocation count"];
+    const rows = this.filteredTeamProjects.map(item => [
+      item.projectCode,
+      item.name,
+      item.clientName || '—',
+      item.status,
+      item.technologies,
+      item.assignments?.length || 0
+    ]);
+    if (type === 'csv') exportToCsv(headers, rows, "Team_Projects");
+    else if (type === 'excel') exportToExcel(headers, rows, "Team_Projects");
+    else if (type === 'pdf') exportToPdf(headers, rows, "Team_Projects");
+    else if (type === 'print') printTable(headers, rows, "Team Projects Allocation");
+  }
+
+  // ----------------------------------------------------
+  // Direct profiles export helper
   // ----------------------------------------------------
   exportTeam(type: string) {
     const headers = ["Employee Code", "First Name", "Last Name", "Email", "Designation", "Experience", "Work Mode"];
@@ -808,6 +2075,8 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
       exportToCsv(headers, rows, "My_Team_Competency_Roster");
     } else if (type === "excel") {
       exportToExcel(headers, rows, "My_Team_Competency_Roster");
+    } else if (type === "pdf") {
+      exportToPdf(headers, rows, "My_Team_Competency_Roster");
     } else if (type === "print") {
       printTable(headers, rows, "My Team Competencies - SkillSphere");
     }
@@ -862,12 +2131,88 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
     });
   }
 
+  loadTeamSummary() {
+    const managerId = this.currentUser?.employeeId;
+    if (!managerId) return;
+    this.dataService.getTeamSummary(managerId).subscribe({
+      next: (res) => {
+        this.teamSummaryData = res.data;
+        this.filterManagerTeam();
+      }
+    });
+  }
+
+  filterManagerTeam() {
+    if (!this.teamSummaryData) return;
+    let list = [...this.teamSummaryData.teamMembers];
+
+    // Search text filter
+    if (this.resumeSearchText.trim()) {
+      const q = this.resumeSearchText.toLowerCase();
+      list = list.filter(m => 
+        (m.firstName + ' ' + m.lastName).toLowerCase().includes(q) ||
+        m.employeeCode.toLowerCase().includes(q)
+      );
+    }
+
+    // Skill filter
+    if (this.resumeSkillFilter) {
+      list = list.filter(m => {
+        return this.allTeamSkills.some((s: any) => s.employeeId === m.id && s.skill?.skillName === this.resumeSkillFilter);
+      });
+    }
+
+    // Project filter
+    if (this.resumeProjectFilter) {
+      list = list.filter(m => {
+        const activeProjs = this.getEmployeeActiveProjects(m.id);
+        return activeProjs.some((p: any) => p.projectName === this.resumeProjectFilter);
+      });
+    }
+
+    this.filteredManagerReports = list;
+    this.totalResumePages = Math.ceil(this.filteredManagerReports.length / this.resumePageSize) || 1;
+    this.resumePage = Math.min(this.resumePage, this.totalResumePages);
+    const start = (this.resumePage - 1) * this.resumePageSize;
+    this.paginatedManagerReports = this.filteredManagerReports.slice(start, start + this.resumePageSize);
+  }
+
+  setResumePage(page: number) {
+    if (page < 1 || page > this.totalResumePages) return;
+    this.resumePage = page;
+    this.filterManagerTeam();
+  }
+
+  getEmployeeActiveProjects(employeeId: string): any[] {
+    if (!this.teamSummaryData) return [];
+    return this.teamSummaryData.employeeContributions.filter((c: any) => c.employeeId === employeeId && c.status === 'ACTIVE');
+  }
+
+  viewMemberFullResume(member: any) {
+    this.openResumeModal(member);
+  }
+
+  downloadTeamResumePDF() {
+    exportHtmlToPdf('teamResumeSummary', `Team_CV_Summary_${this.currentUser.lastName}`);
+  }
+
+  downloadMemberResumePDF() {
+    if (this.resumePreviewData) {
+      exportHtmlToPdf('resumePreviewWindow', `Resume_${this.resumePreviewData.employee.firstName}_${this.resumePreviewData.employee.lastName}`);
+    }
+  }
+
+  printMemberResume() {
+    window.print();
+  }
+
   onSaveSkill() {
     if (this.skillForm.invalid) return;
     this.dataService.assignSkill(this.skillForm.value).subscribe({
       next: () => {
         this.closeModal();
         this.loadStats();
+        this.loadTeamData();
       },
       error: (err) => (this.actionError = err.error?.message || "Failed to assign skill"),
     });
@@ -879,6 +2224,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit {
       next: () => {
         this.closeModal();
         this.loadStats();
+        this.loadTeamData();
       },
       error: (err) => (this.actionError = err.error?.message || "Failed to assign training plan"),
     });

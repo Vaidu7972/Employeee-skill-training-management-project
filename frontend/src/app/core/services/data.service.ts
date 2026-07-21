@@ -324,6 +324,10 @@ export class DataService {
     return this.http.get<any>(`${this.baseApi}/resume/team/${managerId}`);
   }
 
+  getTeamSummary(managerId: string): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/resume/team-summary/${managerId}`);
+  }
+
   updateResumeSettings(body: any): Observable<any> {
     return this.http.put<any>(`${this.baseApi}/resume/settings`, body);
   }
@@ -365,6 +369,22 @@ export class DataService {
 
   getReportTickets(query?: any): Observable<any> {
     return this.http.get<any>(`${this.baseApi}/reports/tickets`, { params: this.buildParams(query) });
+  }
+
+  getReportDepartments(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/reports/departments`, { params: this.buildParams(query) });
+  }
+
+  getReportTeams(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/reports/teams`, { params: this.buildParams(query) });
+  }
+
+  getReportSkillGaps(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/reports/skillgaps`, { params: this.buildParams(query) });
+  }
+
+  getReportAudit(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/reports/audit`, { params: this.buildParams(query) });
   }
 
   getReportDownloads(): Observable<any> {

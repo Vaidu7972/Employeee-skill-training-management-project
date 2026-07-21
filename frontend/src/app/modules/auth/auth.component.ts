@@ -51,6 +51,30 @@ import { AuthService } from "../../core/services/auth.service";
               <button class="btn btn-outline">Enter Employee Portal</button>
             </div>
           </div>
+
+          <!-- Demo credentials grid -->
+          <div style="margin-top:40px; padding:20px; background:var(--surface-card); border:1px solid var(--border); border-radius:12px; max-width:800px; margin-left:auto; margin-right:auto; text-align:left; box-shadow:var(--shadow);">
+            <h4 style="margin:0 0 12px; font-size:14px; color:var(--primary); font-weight:700; text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:8px;">
+              <span class="material-icons" style="font-size:18px;">key</span> Development Test Logins & Credentials
+            </h4>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; font-size:13px;">
+              <div>
+                <h5 style="margin:0 0 4px; color:var(--text-primary); font-weight:600;">Super Administrator</h5>
+                <p style="margin:2px 0; color:var(--text-secondary);"><strong>User:</strong> admin&#64;skillsphere.local</p>
+                <p style="margin:2px 0; color:var(--text-secondary);"><strong>Pass:</strong> Admin&#64;2026</p>
+              </div>
+              <div style="border-left:1px solid var(--border); padding-left:16px;">
+                <h5 style="margin:0 0 4px; color:var(--text-primary); font-weight:600;">Manager (David Miller)</h5>
+                <p style="margin:2px 0; color:var(--text-secondary);"><strong>User:</strong> manager&#64;skillsphere.local</p>
+                <p style="margin:2px 0; color:var(--text-secondary);"><strong>Pass:</strong> Manager&#64;2026</p>
+              </div>
+              <div style="border-left:1px solid var(--border); padding-left:16px;">
+                <h5 style="margin:0 0 4px; color:var(--text-primary); font-weight:600;">Employee (James Cole)</h5>
+                <p style="margin:2px 0; color:var(--text-secondary);"><strong>User:</strong> employee&#64;skillsphere.local</p>
+                <p style="margin:2px 0; color:var(--text-secondary);"><strong>Pass:</strong> Employee&#64;2026</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- 2. LOGIN FORM LAYOUT -->
@@ -361,12 +385,9 @@ export class AuthComponent implements OnInit {
     this.authService.login(email, password, portal).subscribe({
       next: (res) => {
         this.loading = false;
-        // Redirect to dashboards
         const role = res.data.user.role;
-        if (role === "SUPER_ADMIN") {
+        if (role === "ADMIN") {
           this.router.navigate(["/admin/dashboard"]);
-        } else if (role === "ADMIN_SUPPORT") {
-          this.router.navigate(["/admin/tickets"]);
         } else if (role === "MANAGER") {
           this.router.navigate(["/manager/dashboard"]);
         } else {

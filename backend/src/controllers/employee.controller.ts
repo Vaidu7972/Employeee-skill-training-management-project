@@ -412,7 +412,7 @@ export const createEmployee = async (req: any, res: Response, next: NextFunction
 
     // Resolve Manager Allocation
     let finalManagerId = managerId || null;
-    if (!finalManagerId && role !== SystemRole.SUPER_ADMIN && role !== SystemRole.ADMIN_SUPPORT && role !== SystemRole.MANAGER) {
+    if (!finalManagerId && role !== SystemRole.ADMIN && role !== SystemRole.ADMIN && role !== SystemRole.MANAGER) {
       // Auto-assign manager
       finalManagerId = await autoAllocateManager(departmentId);
     }

@@ -21,7 +21,7 @@ export class AuthGuard implements CanActivate {
 
     if (expectedRoles && !expectedRoles.includes(user.role)) {
       // User is logged in but doesn't have right role for this portal section
-      if (user.role === "SUPER_ADMIN" || user.role === "ADMIN_SUPPORT") {
+      if (user.role === "ADMIN") {
         this.router.navigate(["/admin/dashboard"]);
       } else if (user.role === "MANAGER") {
         this.router.navigate(["/manager/dashboard"]);

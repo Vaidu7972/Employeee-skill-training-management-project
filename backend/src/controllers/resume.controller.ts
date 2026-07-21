@@ -67,6 +67,56 @@ export const generateResumeData = async (req: Request, res: Response) => {
       ? Math.min(100, Math.round((approvedSkills / totalSkills) * 40 + Math.min(completedTrain * 5, 30) + Math.min(verifiedCerts * 10, 30)))
       : 0;
 
+    // Generate professional auto-summary
+    const approvedSkillsList = employee.employeeSkills.filter(s => s.status === "APPROVED");
+    const topSkills = approvedSkillsList
+      .slice(0, 3)
+      .map(s => s.skill.skillName)
+      .join(", ");
+    
+    // Main technologies
+    const techSet = new Set<string>();
+    employee.projectAssignments.forEach(pa => {
+      if (pa.project.technologies) {
+        pa.project.technologies.split(",").forEach(t => {
+          const cleaned = t.trim();
+          if (cleaned) techSet.add(cleaned);
+        });
+      }
+    });
+    const mainTech = Array.from(techSet).slice(0, 4).join(", ");
+    
+    // Completed projects count
+    const completedProjectsCount = employee.projectAssignments.filter(pa => pa.project.status === "COMPLETED").length;
+    
+    // Project domains
+    const domainsSet = new Set<string>();
+    employee.projectAssignments.forEach(pa => {
+      // simple extraction of domain keywords from project name
+      const lastWord = pa.project.name.split(" ").slice(-1)[0];
+      domainsSet.add(lastWord);
+    });
+    const domains = Array.from(domainsSet).slice(0, 3).join(", ");
+
+    let autoSummary = `Professional ${employee.designation.name} with ${employee.yearsOfExperience} years of experience in the ${employee.department.name} department. `;
+    if (topSkills) {
+      autoSummary += `Recognized for verified proficiency in ${topSkills}. `;
+    }
+    if (mainTech) {
+      autoSummary += `Experienced in core technologies including ${mainTech}. `;
+    }
+    if (completedProjectsCount > 0) {
+      autoSummary += `Successfully delivered ${completedProjectsCount} completed project(s) `;
+      if (domains) {
+        autoSummary += `focusing on ${domains} domains. `;
+      }
+    } else {
+      autoSummary += `Actively contributing to critical project workflows. `;
+    }
+    if (completedTrain > 0 || verifiedCerts > 0) {
+      autoSummary += `Demonstrates continuous learning, with ${completedTrain} completed training plan(s) and ${verifiedCerts} verified credential(s).`;
+    }
+
     const resumeData = {
       employee: {
         id:                employee.id,
@@ -84,6 +134,8 @@ export const generateResumeData = async (req: Request, res: Response) => {
         workMode:          employee.workMode,
         employmentType:    employee.employmentType,
         careerObjective:   employee.careerObjective,
+        education:         employee.education,
+        autoSummary:       autoSummary,
         resumeFeedback:    employee.resumeFeedback,
         resumeTemplate:    employee.resumeTemplate,
         resumeHideContact: employee.resumeHideContact,
@@ -283,6 +335,151 @@ export const trackResumeDownload = async (req: Request, res: Response) => {
     await createAuditLog((req as any).user.id, "DOWNLOAD_RESUME", "EMPLOYEE", null, download);
 
     return res.status(201).json({ success: true, data: download });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// GET /api/resume/team-summary/:managerId - Get aggregated dashboard data for Team Resume
+export const getTeamSummary = async (req: Request, res: Response) => {
+  try {
+    const { managerId } = req.params;
+    const manager = await prisma.employee.findUnique({
+      where: { id: managerId },
+      include: { department: true }
+    });
+    if (!manager) return res.status(404).json({ success: false, message: "Manager not found" });
+
+    const team = await prisma.employee.findMany({
+      where: { managerId },
+      include: {
+        designation: true,
+        department: true,
+        employeeSkills: {
+          where: { status: "APPROVED" },
+          include: { skill: true }
+        },
+        trainingPlans: true,
+        certificates: {
+          where: { verificationStatus: "VERIFIED" }
+        },
+        projectAssignments: {
+          include: { project: true }
+        }
+      }
+    });
+
+    // Aggregate stats
+    const totalTeamMembers = team.length;
+    const avgExperience = totalTeamMembers > 0 
+      ? Number((team.reduce((acc, t) => acc + Number(t.yearsOfExperience), 0) / totalTeamMembers).toFixed(1))
+      : 0;
+
+    // Top Skills
+    const skillCounts: Record<string, number> = {};
+    team.forEach(t => {
+      t.employeeSkills.forEach(es => {
+        skillCounts[es.skill.skillName] = (skillCounts[es.skill.skillName] || 0) + 1;
+      });
+    });
+    const topSkills = Object.entries(skillCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(entry => entry[0]);
+
+    // Main Technologies
+    const techCounts: Record<string, number> = {};
+    team.forEach(t => {
+      t.projectAssignments.forEach(pa => {
+        if (pa.project.technologies) {
+          pa.project.technologies.split(",").forEach(tech => {
+            const cleaned = tech.trim();
+            if (cleaned) {
+              techCounts[cleaned] = (techCounts[cleaned] || 0) + 1;
+            }
+          });
+        }
+      });
+    });
+    const mainTechnologies = Object.entries(techCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(entry => entry[0]);
+
+    // Projects
+    const projectIds = new Set<string>();
+    let activeProjectsCount = 0;
+    let completedProjectsCount = 0;
+    team.forEach(t => {
+      t.projectAssignments.forEach(pa => {
+        if (!projectIds.has(pa.project.id)) {
+          projectIds.add(pa.project.id);
+          if (pa.project.status === "ACTIVE") activeProjectsCount++;
+          else if (pa.project.status === "COMPLETED") completedProjectsCount++;
+        }
+      });
+    });
+
+    // Trainings
+    let totalTrainings = 0;
+    let completedTrainings = 0;
+    team.forEach(t => {
+      t.trainingPlans.forEach(tp => {
+        totalTrainings++;
+        if (tp.status === "COMPLETED" || tp.status === "VERIFIED") {
+          completedTrainings++;
+        }
+      });
+    });
+    const trainingCompletionPercent = totalTrainings > 0
+      ? Math.round((completedTrainings / totalTrainings) * 100)
+      : 0;
+
+    // Certificates
+    const verifiedCertificatesCount = team.reduce((acc, t) => acc + t.certificates.length, 0);
+
+    // Employee project contributions list
+    const projectContributions: any[] = [];
+    team.forEach(t => {
+      t.projectAssignments.forEach(pa => {
+        projectContributions.push({
+          employeeId: t.id,
+          employeeName: `${t.firstName} ${t.lastName}`,
+          projectCode: pa.project.projectCode,
+          projectName: pa.project.name,
+          role: pa.role,
+          contributionPercent: pa.contributionPercent,
+          status: pa.project.status,
+          technologies: pa.project.technologies,
+        });
+      });
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        managerName: `${manager.firstName} ${manager.lastName}`,
+        department: manager.department?.name || "Engineering",
+        totalTeamMembers,
+        averageExperience: avgExperience,
+        topSkills,
+        mainTechnologies,
+        activeProjects: activeProjectsCount,
+        completedProjects: completedProjectsCount,
+        trainingCompletionPercentage: trainingCompletionPercent,
+        verifiedCertificates: verifiedCertificatesCount,
+        employeeContributions: projectContributions,
+        teamMembers: team.map(t => ({
+          id: t.id,
+          firstName: t.firstName,
+          lastName: t.lastName,
+          employeeCode: t.employeeCode,
+          designation: t.designation?.name,
+          yearsOfExperience: t.yearsOfExperience,
+          email: t.email,
+        }))
+      }
+    });
   } catch (e: any) {
     return res.status(500).json({ success: false, message: e.message });
   }

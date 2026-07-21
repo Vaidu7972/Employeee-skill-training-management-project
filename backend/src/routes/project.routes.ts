@@ -27,13 +27,13 @@ router.get("/:id", authenticateJWT, getProjectById);
 router.post(
   "/",
   authenticateJWT,
-  requireRoles([SystemRole.SUPER_ADMIN, SystemRole.MANAGER]),
+  requireRoles([SystemRole.ADMIN, SystemRole.MANAGER]),
   createProject
 );
 router.put(
   "/:id",
   authenticateJWT,
-  requireRoles([SystemRole.SUPER_ADMIN, SystemRole.MANAGER]),
+  requireRoles([SystemRole.ADMIN, SystemRole.MANAGER]),
   updateProject
 );
 
@@ -41,7 +41,7 @@ router.put(
 router.put(
   "/:id/archive",
   authenticateJWT,
-  requireRoles([SystemRole.SUPER_ADMIN, SystemRole.MANAGER]),
+  requireRoles([SystemRole.ADMIN, SystemRole.MANAGER]),
   archiveProject
 );
 
@@ -49,7 +49,7 @@ router.put(
 router.delete(
   "/:id",
   authenticateJWT,
-  requireRoles([SystemRole.SUPER_ADMIN]),
+  requireRoles([SystemRole.ADMIN]),
   deleteProject
 );
 
@@ -57,13 +57,13 @@ router.delete(
 router.post(
   "/:id/assign",
   authenticateJWT,
-  requireRoles([SystemRole.SUPER_ADMIN, SystemRole.MANAGER]),
+  requireRoles([SystemRole.ADMIN, SystemRole.MANAGER]),
   assignEmployee
 );
 router.put(
   "/:id/unassign/:employeeId",
   authenticateJWT,
-  requireRoles([SystemRole.SUPER_ADMIN, SystemRole.MANAGER]),
+  requireRoles([SystemRole.ADMIN, SystemRole.MANAGER]),
   unassignEmployee
 );
 
@@ -71,7 +71,7 @@ router.put(
 router.post(
   "/:id/skills",
   authenticateJWT,
-  requireRoles([SystemRole.SUPER_ADMIN, SystemRole.MANAGER]),
+  requireRoles([SystemRole.ADMIN, SystemRole.MANAGER]),
   addProjectSkill
 );
 

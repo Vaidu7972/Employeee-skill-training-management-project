@@ -42,7 +42,7 @@ app.use(express.urlencoded({ extended: true }));
 // Rate Limiter
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // Limit each IP to 300 requests per window
+  max: process.env.NODE_ENV === "production" ? 300 : 10000, // High limit for local E2E tests
   standardHeaders: true,
   legacyHeaders: false,
   message: {

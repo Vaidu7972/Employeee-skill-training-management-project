@@ -111,6 +111,10 @@ export const getAdminDashboard = async (req: Request, res: Response, next: NextF
       ? Math.round((activeEmployees / managerAllocCount) * 100) 
       : 0;
 
+    const verifiedCertificates = await prisma.certificate.count({
+      where: { verificationStatus: CertificateStatus.VERIFIED },
+    });
+
     return res.status(200).json({
       success: true,
       message: "Admin dashboard stats compiled",
@@ -123,6 +127,7 @@ export const getAdminDashboard = async (req: Request, res: Response, next: NextF
         totalSkills,
         pendingSkillReviews,
         verifiedSkills,
+        verifiedCertificates,
         activeTrainings,
         completedTrainings,
         overdueTrainings,
@@ -326,7 +331,7 @@ export const getEmployeeDashboard = async (req: any, res: Response, next: NextFu
     });
 
     const openSupportTickets = await prisma.supportTicket.count({
-      where: { creatorId: employeeId, status: { in: [TicketStatus.OPEN, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS, TicketStatus.REOPENED] } },
+      where: { employeeId, status: { in: [TicketStatus.OPEN, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS, TicketStatus.REOPENED] } },
     });
 
     const totalTrainings = await prisma.trainingPlan.count({ where: { employeeId } });

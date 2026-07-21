@@ -14,10 +14,10 @@ const router = Router();
 
 // Assessments list/create
 router.get("/", authenticateJWT, getAssessments);
-router.post("/", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN]), createAssessment);
+router.post("/", authenticateJWT, requireRoles([SystemRole.ADMIN]), createAssessment);
 
 // Submissions
-router.get("/submissions", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN, SystemRole.MANAGER]), getAllSubmissions);
+router.get("/submissions", authenticateJWT, requireRoles([SystemRole.ADMIN, SystemRole.MANAGER]), getAllSubmissions);
 router.get("/submissions/my", authenticateJWT, requireRoles([SystemRole.EMPLOYEE]), getMySubmissions);
 
 // Single assessment detail & submission

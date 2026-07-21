@@ -18,18 +18,18 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Retrieve directory & export data
 router.get("/", authenticateJWT, getEmployees);
-router.get("/export/csv", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN]), exportEmployeesCSV);
+router.get("/export/csv", authenticateJWT, requireRoles([SystemRole.ADMIN]), exportEmployeesCSV);
 
 // Manager capacity and allocations
-router.get("/managers/capacities", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN]), getManagersCapacity);
-router.post("/managers/allocate", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN]), allocateManagerAPI);
+router.get("/managers/capacities", authenticateJWT, requireRoles([SystemRole.ADMIN]), getManagersCapacity);
+router.post("/managers/allocate", authenticateJWT, requireRoles([SystemRole.ADMIN]), allocateManagerAPI);
 
 // Profile CRUD
-router.post("/", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN]), createEmployee);
+router.post("/", authenticateJWT, requireRoles([SystemRole.ADMIN]), createEmployee);
 router.put("/:employeeId", authenticateJWT, checkAccessRight, updateEmployee);
-router.put("/:id/status", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN]), toggleEmployeeStatus);
+router.put("/:id/status", authenticateJWT, requireRoles([SystemRole.ADMIN]), toggleEmployeeStatus);
 
 // Bulk Upload
-router.post("/import/csv", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN]), upload.single("file"), importEmployeesCSV);
+router.post("/import/csv", authenticateJWT, requireRoles([SystemRole.ADMIN]), upload.single("file"), importEmployeesCSV);
 
 export default router;

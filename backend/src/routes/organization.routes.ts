@@ -14,12 +14,12 @@ const router = Router();
 
 // Departments
 router.get("/departments", authenticateJWT, getDepartments);
-router.post("/departments", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN]), createDepartment);
-router.put("/departments/:id", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN]), updateDepartment);
+router.post("/departments", authenticateJWT, requireRoles([SystemRole.ADMIN]), createDepartment);
+router.put("/departments/:id", authenticateJWT, requireRoles([SystemRole.ADMIN]), updateDepartment);
 
 // Designations
 router.get("/designations", authenticateJWT, getDesignations);
-router.post("/designations", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN]), createDesignation);
-router.put("/designations/:id", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN]), updateDesignation);
+router.post("/designations", authenticateJWT, requireRoles([SystemRole.ADMIN]), createDesignation);
+router.put("/designations/:id", authenticateJWT, requireRoles([SystemRole.ADMIN]), updateDesignation);
 
 export default router;

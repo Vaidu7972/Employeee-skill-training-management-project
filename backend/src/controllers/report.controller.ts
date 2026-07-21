@@ -305,7 +305,8 @@ export const reportTickets = async (req: Request, res: Response) => {
     const tickets = await prisma.supportTicket.findMany({
       where,
       include: {
-        creator: { select: { email: true, firstName: true, lastName: true } },
+        employee: { select: { email: true } },
+        manager: { select: { email: true } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -316,7 +317,7 @@ export const reportTickets = async (req: Request, res: Response) => {
       category:     t.category,
       priority:     t.priority,
       status:       t.status,
-      createdBy:    t.creator.email,
+      createdBy:    t.employee?.email || t.manager?.email || "—",
       assignedTo:   t.assignedAdminId || "—",
       createdAt:    t.createdAt,
       resolvedAt:   t.resolutionDate,
@@ -351,6 +352,217 @@ export const reportDownloads = async (req: Request, res: Response) => {
       template:     d.template,
       format:       d.format,
       downloadedAt: d.createdAt,
+    }));
+
+    return res.json({ success: true, data: rows, total: rows.length });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+
+// ---------------------------------------------------------------
+// GET /api/reports/departments
+// ---------------------------------------------------------------
+export const reportDepartments = async (req: Request, res: Response) => {
+  try {
+    const departments = await prisma.department.findMany({
+      include: {
+        employees: { select: { id: true, accountStatus: true } },
+        skillRequirements: { select: { id: true } },
+      }
+    });
+
+    const heads = await prisma.employee.findMany({
+      where: { id: { in: departments.map(d => d.departmentHeadId).filter(Boolean) as string[] } },
+      select: { id: true, firstName: true, lastName: true }
+    });
+    const headMap = new Map(heads.map(h => [h.id, `${h.firstName} ${h.lastName}`]));
+
+    const rows = departments.map((d) => ({
+      code:        d.code,
+      name:        d.name,
+      description: d.description || "—",
+      head:        d.departmentHeadId ? headMap.get(d.departmentHeadId) || "—" : "—",
+      status:      d.status,
+      staffCount:  d.employees.filter(e => e.accountStatus === "ACTIVE").length,
+      skillsCount: d.skillRequirements.length,
+    }));
+
+    return res.json({ success: true, data: rows, total: rows.length });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// ---------------------------------------------------------------
+// GET /api/reports/teams
+// ---------------------------------------------------------------
+export const reportTeams = async (req: Request, res: Response) => {
+  try {
+    const managers = await prisma.employee.findMany({
+      where: { user: { role: "MANAGER" } },
+      include: {
+        department: { select: { name: true } },
+        subordinates: {
+          include: {
+            employeeSkills: {
+              where: { status: "APPROVED" },
+              select: { finalRating: true }
+            },
+            trainingPlans: {
+              select: { status: true }
+            },
+            certificates: {
+              select: { verificationStatus: true }
+            }
+          }
+        }
+      }
+    });
+
+    const rows = managers.map((m) => {
+      const teamSize = m.subordinates.length;
+      let totalRating = 0;
+      let skillCount = 0;
+      let completedTrainings = 0;
+      let overdueTrainings = 0;
+      let activeTrainings = 0;
+      let pendingCerts = 0;
+
+      m.subordinates.forEach(s => {
+        s.employeeSkills.forEach(sk => {
+          totalRating += sk.finalRating;
+          skillCount++;
+        });
+        s.trainingPlans.forEach(tp => {
+          if (tp.status === "COMPLETED" || tp.status === "VERIFIED") completedTrainings++;
+          else if (tp.status === "OVERDUE") overdueTrainings++;
+          else if (tp.status === "IN_PROGRESS" || tp.status === "ASSIGNED") activeTrainings++;
+        });
+        s.certificates.forEach(c => {
+          if (c.verificationStatus === "PENDING") pendingCerts++;
+        });
+      });
+
+      const avgRating = skillCount > 0 ? Number((totalRating / skillCount).toFixed(2)) : 0;
+
+      return {
+        manager: `${m.firstName} ${m.lastName}`,
+        department: m.department?.name || "—",
+        teamSize,
+        avgSkillRating: avgRating,
+        activeTrainings,
+        completedTrainings,
+        overdueTrainings,
+        pendingCertificates: pendingCerts
+      };
+    });
+
+    return res.json({ success: true, data: rows, total: rows.length });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// ---------------------------------------------------------------
+// GET /api/reports/skillgaps
+// ---------------------------------------------------------------
+export const reportSkillGaps = async (req: Request, res: Response) => {
+  try {
+    const employees = await prisma.employee.findMany({
+      include: {
+        department: {
+          include: {
+            skillRequirements: {
+              include: { skill: { select: { skillName: true, skillCode: true } } }
+            }
+          }
+        },
+        designation: {
+          include: {
+            skillRequirements: {
+              include: { skill: { select: { skillName: true, skillCode: true } } }
+            }
+          }
+        },
+        employeeSkills: {
+          include: { skill: { select: { skillName: true, skillCode: true } } }
+        }
+      }
+    });
+
+    const rows: any[] = [];
+
+    employees.forEach(emp => {
+      const empSkillMap = new Map(emp.employeeSkills.map(es => [es.skillId, es]));
+      const requiredSkillsMap = new Map<string, { skillName: string, skillCode: string, requiredLevel: number }>();
+      
+      emp.department.skillRequirements.forEach(req => {
+        requiredSkillsMap.set(req.skillId, {
+          skillName: req.skill.skillName,
+          skillCode: req.skill.skillCode,
+          requiredLevel: req.requiredLevel
+        });
+      });
+
+      emp.designation.skillRequirements.forEach(req => {
+        const existing = requiredSkillsMap.get(req.skillId);
+        if (!existing || req.requiredLevel > existing.requiredLevel) {
+          requiredSkillsMap.set(req.skillId, {
+            skillName: req.skill.skillName,
+            skillCode: req.skill.skillCode,
+            requiredLevel: req.requiredLevel
+          });
+        }
+      });
+
+      requiredSkillsMap.forEach((req, skillId) => {
+        const empSkill = empSkillMap.get(skillId);
+        const currentLevel = empSkill && empSkill.status === "APPROVED" ? empSkill.finalRating : 0;
+        const gap = req.requiredLevel - currentLevel;
+        
+        if (gap > 0) {
+          rows.push({
+            employeeCode: emp.employeeCode,
+            name: `${emp.firstName} ${emp.lastName}`,
+            department: emp.department.name,
+            skillCode: req.skillCode,
+            skillName: req.skillName,
+            requiredLevel: req.requiredLevel,
+            currentLevel,
+            gap,
+            priority: gap >= 3 ? "CRITICAL" : gap >= 2 ? "HIGH" : "MEDIUM"
+          });
+        }
+      });
+    });
+
+    return res.json({ success: true, data: rows, total: rows.length });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+// ---------------------------------------------------------------
+// GET /api/reports/audit
+// ---------------------------------------------------------------
+export const reportAudit = async (req: Request, res: Response) => {
+  try {
+    const logs = await prisma.auditLog.findMany({
+      include: {
+        user: { select: { email: true } }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+
+    const rows = logs.map((log) => ({
+      userEmail: log.user?.email || "SYSTEM",
+      action: log.action,
+      component: log.component,
+      ipAddress: log.ipAddress || "—",
+      createdAt: log.createdAt,
+      details: log.oldValue || log.newValue ? `Old: ${JSON.stringify(log.oldValue).substring(0,60)}... | New: ${JSON.stringify(log.newValue).substring(0,60)}...` : "None"
     }));
 
     return res.json({ success: true, data: rows, total: rows.length });

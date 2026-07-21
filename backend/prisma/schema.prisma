@@ -8,8 +8,7 @@ generator client {
 }
 
 enum SystemRole {
-  SUPER_ADMIN
-  ADMIN_SUPPORT
+  ADMIN
   MANAGER
   EMPLOYEE
 }
@@ -174,6 +173,7 @@ model User {
   auditLogs         AuditLog[]
   errorLogs         ErrorLog[]
   resumeDownloads   ResumeDownload[] @relation("UserDownloads")
+  ticketsAssigned   SupportTicket[]  @relation("TicketAssignedAdmin")
 
   @@map("users")
 }
@@ -273,6 +273,7 @@ model Employee {
   userId            String?       @unique @db.Uuid
   user              User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
   careerObjective   String?
+  education         String?
   resumeFeedback    String?
   resumeTemplate    String        @default("minimalist")
   resumeHideContact Boolean       @default(false)
@@ -291,7 +292,8 @@ model Employee {
   certificates              Certificate[]
   learningPaths             EmployeeLearningPath[]
   achievements              EmployeeAchievement[]
-  ticketsCreated            SupportTicket[]            @relation("TicketCreator")
+  ticketsAsEmployee         SupportTicket[]            @relation("TicketEmployee")
+  ticketsAsManager          SupportTicket[]            @relation("TicketManager")
   assessmentSubmissions     SkillAssessmentSubmission[]
   projectsManaged           Project[]                  @relation("ProjectManager")
   projectAssignments        ProjectAssignment[]
@@ -649,15 +651,21 @@ model CareerPathSkill {
 
 model SupportTicket {
   id                       String         @id @default(uuid()) @db.Uuid
-  ticketNumber             String         @unique
+  ticketNumber             String         @unique @map("ticket_number")
+  createdByUserId          String         @db.Uuid @map("created_by_user_id")
+  createdByRole            SystemRole     @map("created_by_role")
+  employeeId               String?        @db.Uuid @map("employee_id")
+  employee                 Employee?      @relation("TicketEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  managerId                String?        @db.Uuid @map("manager_id")
+  manager                  Employee?      @relation("TicketManager", fields: [managerId], references: [id], onDelete: Cascade)
+  category                 TicketCategory
   subject                  String
   description              String
-  category                 TicketCategory
   priority                 TicketPriority @default(MEDIUM)
   status                   TicketStatus   @default(OPEN)
-  creatorId                String         @db.Uuid
-  creator                  Employee       @relation("TicketCreator", fields: [creatorId], references: [id], onDelete: Cascade)
-  assignedAdminId          String?        @db.Uuid // User ID of the assigned Admin/Support
+  assignedAdminId          String?        @db.Uuid @map("assigned_admin_id")
+  assignedAdmin            User?          @relation("TicketAssignedAdmin", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  resolution               String?
   slaDueDate               DateTime       @db.Timestamptz
   firstResponseDate        DateTime?      @db.Timestamptz
   resolutionDate           DateTime?      @db.Timestamptz
@@ -666,61 +674,73 @@ model SupportTicket {
   slaStatus                SlaStatus      @default(WITHIN_SLA)
   breachReason             String?
   escalationLevel          Int            @default(0)
-  createdAt                DateTime       @default(now()) @db.Timestamptz
-  updatedAt                DateTime       @updatedAt @db.Timestamptz
+  createdAt                DateTime       @default(now()) @db.Timestamptz @map("created_at")
+  updatedAt                DateTime       @updatedAt @db.Timestamptz @map("updated_at")
+  resolvedAt               DateTime?      @db.Timestamptz @map("resolved_at")
+  closedAt                 DateTime?      @db.Timestamptz @map("closed_at")
+  reopenedAt               DateTime?      @db.Timestamptz @map("reopened_at")
 
-  messages                 TicketMessage[]
+  comments                 TicketComment[]
   attachments              TicketAttachment[]
-  statusHistories          TicketStatusHistory[]
+  histories                TicketHistory[]
   slaHistories             TicketSlaHistory[]
 
-  @@index([creatorId])
   @@index([status])
   @@index([priority])
   @@map("support_tickets")
 }
 
-model TicketMessage {
-  id         String     @id @default(uuid()) @db.Uuid
-  ticketId   String     @db.Uuid
-  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  senderId   String     @db.Uuid // User ID of sender
-  message    String
-  isInternal Boolean    @default(false)
-  createdAt  DateTime   @default(now()) @db.Timestamptz
+model TicketComment {
+  id             String         @id @default(uuid()) @db.Uuid
+  ticketId       String         @db.Uuid @map("ticket_id")
+  ticket         SupportTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderUserId   String         @db.Uuid @map("sender_user_id")
+  senderRole     SystemRole     @map("sender_role")
+  message        String
+  isInternalNote Boolean        @default(false) @map("is_internal_note")
+  createdAt      DateTime       @default(now()) @db.Timestamptz @map("created_at")
+  updatedAt      DateTime       @updatedAt @db.Timestamptz @map("updated_at")
 
-  attachments TicketAttachment[]
+  attachments    TicketAttachment[]
 
   @@index([ticketId])
-  @@map("ticket_messages")
+  @@map("ticket_comments")
 }
 
 model TicketAttachment {
-  id              String         @id @default(uuid()) @db.Uuid
-  ticketId        String         @db.Uuid
-  ticket          SupportTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  ticketMessageId String?        @db.Uuid
-  ticketMessage   TicketMessage? @relation(fields: [ticketMessageId], references: [id], onDelete: SetNull)
-  fileName        String
-  filePath        String
-  fileSize        Int
-  createdAt       DateTime       @default(now()) @db.Timestamptz
+  id               String         @id @default(uuid()) @db.Uuid
+  ticketId         String         @db.Uuid @map("ticket_id")
+  ticket           SupportTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  commentId        String?        @db.Uuid @map("comment_id")
+  comment          TicketComment? @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  fileName         String         @map("file_name")
+  originalFileName String         @map("original_file_name")
+  filePath         String         @map("file_path")
+  mimeType         String         @map("mime_type")
+  fileSize         Int            @map("file_size")
+  uploadedByUserId String         @db.Uuid @map("uploaded_by_user_id")
+  createdAt        DateTime       @default(now()) @db.Timestamptz @map("created_at")
 
   @@index([ticketId])
   @@map("ticket_attachments")
 }
 
-model TicketStatusHistory {
-  id          String        @id @default(uuid()) @db.Uuid
-  ticketId    String        @db.Uuid
-  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  status      TicketStatus
-  updatedById String        @db.Uuid // User ID who changed it
-  comment     String?
-  createdAt   DateTime      @default(now()) @db.Timestamptz
+model TicketHistory {
+  id                String          @id @default(uuid()) @db.Uuid
+  ticketId          String          @db.Uuid @map("ticket_id")
+  ticket            SupportTicket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  action            String
+  oldStatus         TicketStatus?   @map("old_status")
+  newStatus         TicketStatus?   @map("new_status")
+  oldPriority       TicketPriority? @map("old_priority")
+  newPriority       TicketPriority? @map("new_priority")
+  performedByUserId String          @db.Uuid @map("performed_by_user_id")
+  performedByRole   SystemRole      @map("performed_by_role")
+  comment           String?
+  createdAt         DateTime        @default(now()) @db.Timestamptz @map("created_at")
 
   @@index([ticketId])
-  @@map("ticket_status_history")
+  @@map("ticket_history")
 }
 
 model TicketSlaHistory {

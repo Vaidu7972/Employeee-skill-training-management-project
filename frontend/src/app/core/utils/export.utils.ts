@@ -80,3 +80,96 @@ export function printTable(headers: string[], rows: any[][], title: string) {
   win.document.write(html);
   win.document.close();
 }
+
+export function exportToPdf(headers: string[], rows: any[][], fileName: string) {
+  const cdnJsPdf = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+  const cdnAutoTable = "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js";
+  
+  const loadScript = (src: string): Promise<void> => {
+    return new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = () => resolve();
+      document.body.appendChild(script);
+    });
+  };
+
+  Promise.resolve().then(async () => {
+    if (!(window as any).jspdf) {
+      await loadScript(cdnJsPdf);
+    }
+    if (!(window as any).jspdf.jsPDF.API.autoTable) {
+      await loadScript(cdnAutoTable);
+    }
+    
+    const { jsPDF } = (window as any).jspdf;
+    const doc = new jsPDF();
+    
+    // Title
+    doc.setFontSize(16);
+    doc.text(fileName, 14, 20);
+    
+    // Table
+    (doc as any).autoTable({
+      head: [headers],
+      body: rows,
+      startY: 25,
+      theme: "striped",
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [94, 114, 228] }
+    });
+    
+    doc.save(`${fileName}.pdf`);
+  });
+}
+
+export function exportHtmlToPdf(elementId: string, fileName: string) {
+  const cdnHtml2Canvas = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+  const cdnJsPdf = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+  
+  const loadScript = (src: string): Promise<void> => {
+    return new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = () => resolve();
+      document.body.appendChild(script);
+    });
+  };
+
+  Promise.resolve().then(async () => {
+    if (!(window as any).html2canvas) {
+      await loadScript(cdnHtml2Canvas);
+    }
+    if (!(window as any).jspdf) {
+      await loadScript(cdnJsPdf);
+    }
+    
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    
+    const html2canvas = (window as any).html2canvas;
+    const { jsPDF } = (window as any).jspdf;
+    
+    html2canvas(element, { scale: 2, useCORS: true, logging: false }).then((canvas: any) => {
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 295; // A4 height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+      
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+      
+      pdf.save(`${fileName}.pdf`);
+    });
+  });
+}

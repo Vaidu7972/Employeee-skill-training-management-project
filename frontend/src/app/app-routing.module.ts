@@ -28,7 +28,7 @@ const routes: Routes = [
     path: "admin",
     component: AdminLayoutComponent,
     canActivate: [AuthGuard],
-    data: { expectedRoles: ["SUPER_ADMIN", "ADMIN_SUPPORT"] },
+    data: { expectedRoles: ["ADMIN"] },
     children: [
       { path: "dashboard",   component: AdminDashboardComponent },
       { path: "employees",   component: AdminDashboardComponent },

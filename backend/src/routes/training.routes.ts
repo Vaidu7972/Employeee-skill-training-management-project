@@ -51,17 +51,17 @@ const upload = multer({
 
 // Training Providers
 router.get("/providers", authenticateJWT, getProviders);
-router.post("/providers", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN]), createProvider);
+router.post("/providers", authenticateJWT, requireRoles([SystemRole.ADMIN]), createProvider);
 
 // Training Plans
 router.get("/plans", authenticateJWT, getTrainingPlans);
-router.post("/plans", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN, SystemRole.MANAGER]), createTrainingPlan);
+router.post("/plans", authenticateJWT, requireRoles([SystemRole.ADMIN, SystemRole.MANAGER]), createTrainingPlan);
 router.put("/plans/:id/progress", authenticateJWT, updateTrainingProgress);
-router.put("/plans/:id/verify", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN, SystemRole.MANAGER]), verifyTrainingCompletion);
+router.put("/plans/:id/verify", authenticateJWT, requireRoles([SystemRole.ADMIN, SystemRole.MANAGER]), verifyTrainingCompletion);
 
 // Certificates
 router.get("/certificates", authenticateJWT, getCertificates);
 router.post("/certificates/upload", authenticateJWT, upload.single("file"), uploadCertificate);
-router.put("/certificates/:id/verify", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN, SystemRole.MANAGER]), verifyCertificate);
+router.put("/certificates/:id/verify", authenticateJWT, requireRoles([SystemRole.ADMIN, SystemRole.MANAGER]), verifyCertificate);
 
 export default router;

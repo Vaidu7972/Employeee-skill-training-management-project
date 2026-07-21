@@ -21,8 +21,16 @@ export const authenticateJWT = async (
   next: NextFunction
 ) => {
   try {
+    let token: string | undefined;
+
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.split(" ")[1];
+    } else if (req.query.accessToken) {
+      token = req.query.accessToken as string;
+    }
+
+    if (!token) {
       return res.status(401).json({
         success: false,
         message: "Access token is missing or invalid",
@@ -30,7 +38,6 @@ export const authenticateJWT = async (
       });
     }
 
-    const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, JWT_ACCESS_SECRET) as {
       id: string;
       email: string;
@@ -122,7 +129,7 @@ export const checkAccessRight = async (
     const { role, id: userId, employeeId: userEmployeeId } = req.user;
     
     // Admins bypass this check
-    if (role === SystemRole.SUPER_ADMIN || role === SystemRole.ADMIN_SUPPORT) {
+    if (role === SystemRole.ADMIN) {
       return next();
     }
 

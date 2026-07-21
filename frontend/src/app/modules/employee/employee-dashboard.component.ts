@@ -5,6 +5,7 @@ import { DataService } from "../../core/services/data.service";
 import { AuthService } from "../../core/services/auth.service";
 import { filter } from "rxjs/operators";
 import { Subscription, interval } from "rxjs";
+import { exportHtmlToPdf } from "../../core/utils/export.utils";
 
 type TabId = "home" | "skills" | "assessments" | "training" | "tickets" | "settings" | "projects" | "resume";
 
@@ -138,13 +139,13 @@ type TabId = "home" | "skills" | "assessments" | "training" | "tickets" | "setti
               <span class="material-icons">workspace_premium</span> Rate My Skills
             </button>
             <button class="btn btn-secondary" (click)="navigateTo('assessments')">
-              <span class="material-icons">quiz</span> Take a Test
+              <span class="material-icons">quiz</span> Skill Assessments
             </button>
             <button class="btn btn-outline" (click)="navigateTo('training')">
               <span class="material-icons">military_tech</span> Upload Certificate
             </button>
             <button class="btn btn-outline" (click)="navigateTo('tickets')">
-              <span class="material-icons">support_agent</span> Raise Support Ticket
+              <span class="material-icons">support_agent</span> Support Ticket Hub
             </button>
           </div>
         </div>
@@ -157,10 +158,13 @@ type TabId = "home" | "skills" | "assessments" | "training" | "tickets" | "setti
         <div class="dashboard-card">
           <div class="card-header">
             <h4>My Skills Portfolio</h4>
-            <div style="display:flex; gap:8px;">
+            <div style="display:flex; gap:8px; align-items:center;">
               <input type="text" class="filter-input" [(ngModel)]="skillSearch" placeholder="Search skills..." style="padding:7px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg-secondary); color:var(--text-primary); font-size:13px; font-family:inherit;">
-              <button class="btn btn-outline btn-sm" (click)="loadSkills()">
+              <button class="btn btn-outline btn-sm" (click)="loadSkills()" title="Refresh">
                 <span class="material-icons" style="font-size:16px;">refresh</span>
+              </button>
+              <button class="btn btn-primary btn-sm" (click)="openSuggestSkillModal()" style="display:flex; align-items:center; gap:4px; height:34px;">
+                <span class="material-icons" style="font-size:16px;">lightbulb</span> Suggest Skill
               </button>
             </div>
           </div>
@@ -241,26 +245,34 @@ type TabId = "home" | "skills" | "assessments" | "training" | "tickets" | "setti
         <div class="charts-grid">
           <!-- Available Tests -->
           <div class="dashboard-card">
-            <h4>Available Certification Tests</h4>
+            <h4>Available Skill Verification Assessments</h4>
             <div *ngIf="availableAssessments.length === 0" style="text-align:center; padding:30px; color:var(--text-muted); font-size:13px;">
               <span class="material-icons" style="font-size:40px; display:block; margin-bottom:8px;">quiz</span>
               No assessments currently active.
             </div>
-            <div *ngFor="let ass of availableAssessments" style="display:flex; align-items:center; justify-content:space-between; padding:14px; background:var(--bg-secondary); border-radius:10px; margin-bottom:10px; border:1px solid var(--border); transition:var(--transition);"
-              [style.border-color]="'var(--border)'"
-              onmouseenter="this.style.borderColor='var(--primary)'"
-              onmouseleave="this.style.borderColor='var(--border)'"
-            >
-              <div>
-                <div style="font-weight:700; font-size:13.5px; margin-bottom:3px;">{{ ass.title }}</div>
-                <div style="font-size:12px; color:var(--text-muted);">
-                  <span class="material-icons" style="font-size:13px; vertical-align:middle;">workspace_premium</span>
-                  {{ ass.skill?.skillName }} · Passing: <strong>{{ ass.passingScore }}%</strong>
-                </div>
-              </div>
-              <button class="btn btn-primary btn-sm" (click)="startAssessment(ass.id)">
-                <span class="material-icons" style="font-size:14px;">play_arrow</span> Start
-              </button>
+            <div class="table-responsive" *ngIf="availableAssessments.length > 0">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Skill Info</th>
+                    <th>Passing Score</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let ass of availableAssessments">
+                    <td><strong>{{ ass.title }}</strong></td>
+                    <td>{{ ass.skill?.skillName }}</td>
+                    <td><strong>{{ ass.passingScore }}%</strong></td>
+                    <td>
+                      <button class="btn btn-primary btn-sm" (click)="startAssessment(ass.id)">
+                        Start Test
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -710,7 +722,7 @@ type TabId = "home" | "skills" | "assessments" | "training" | "tickets" | "setti
 
               <!-- Options -->
               <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:24px;">
-                <label *ngFor="let opt of getOptionsList(activeAssessment.questions[currentQuestionIndex].options); let idx = index"
+                <label *ngFor="let opt of activeAssessment.questions[currentQuestionIndex].parsedOptions; let idx = index; trackBy: trackByIndex"
                   style="display:flex; align-items:center; gap:12px; padding:13px 16px; border-radius:10px; border:2px solid; cursor:pointer; transition:var(--transition); font-weight:500; font-size:14px;"
                   [style.border-color]="selectedAnswers[currentQuestionIndex] === idx ? 'var(--primary)' : 'var(--border)'"
                   [style.background]="selectedAnswers[currentQuestionIndex] === idx ? 'rgba(91,94,244,0.06)' : 'var(--bg-secondary)'"
@@ -857,6 +869,39 @@ type TabId = "home" | "skills" | "assessments" | "training" | "tickets" | "setti
               </button>
             </form>
 
+            <!-- Suggest Skill Modal -->
+            <form *ngIf="activeModal === 'suggestSkill'" [formGroup]="suggestSkillForm" (ngSubmit)="onSaveSuggestSkill()">
+              <div class="form-group">
+                <label>Skill Name *</label>
+                <input type="text" class="form-control" formControlName="skillName" placeholder="e.g. Docker, Vue.js, Go" />
+              </div>
+              <div class="form-group">
+                <label>Category *</label>
+                <select class="form-control" formControlName="categoryId">
+                  <option value="" disabled>-- Choose Category --</option>
+                  <option *ngFor="let c of categories" [value]="c.id">{{ c.name }}</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Skill Type</label>
+                <select class="form-control" formControlName="skillType">
+                  <option value="TECHNICAL">Technical</option>
+                  <option value="FUNCTIONAL">Functional</option>
+                  <option value="BEHAVIORAL">Behavioral</option>
+                  <option value="LEADERSHIP">Leadership</option>
+                  <option value="DOMAIN">Domain</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Description / Reason for Suggestion *</label>
+                <textarea class="form-control" formControlName="description" rows="4" placeholder="Explain why this skill should be added to the catalog..."></textarea>
+              </div>
+              <div *ngIf="actionError" class="error-banner">{{ actionError }}</div>
+              <button type="submit" class="btn btn-primary w-full" [disabled]="suggestSkillForm.invalid">
+                <span class="material-icons" style="font-size:16px;">send</span> Submit Suggestion
+              </button>
+            </form>
+
             <!-- Reopen Ticket Modal -->
             <div *ngIf="activeModal === 'reopen'">
               <p style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">
@@ -971,6 +1016,10 @@ type TabId = "home" | "skills" | "assessments" | "training" | "tickets" | "setti
                   <span class="material-icons" style="font-size:16px;">save</span>
                   {{ resumeSaving ? 'Saving...' : 'Save Settings' }}
                 </button>
+                <button class="btn btn-outline" (click)="loadResumeData()">
+                  <span class="material-icons" style="font-size:16px;">refresh</span>
+                  Refresh
+                </button>
                 <span *ngIf="resumeSaved" style="color:var(--success); font-size:13px; align-self:center; font-weight:600;">✓ Saved!</span>
               </div>
             </div>
@@ -995,30 +1044,152 @@ type TabId = "home" | "skills" | "assessments" | "training" | "tickets" | "setti
         </div>
 
         <!-- Resume Preview -->
-        <div *ngIf="resumeData" class="dashboard-card resume-preview" id="resumePreview" style="padding:40px;">
-          <!-- Header -->
-          <div style="display:flex; align-items:flex-start; gap:20px; margin-bottom:28px; padding-bottom:24px; border-bottom:2px solid var(--primary);">
-            <div *ngIf="resumeData.employee.profileImage" style="flex-shrink:0;">
-              <img [src]="resumeData.employee.profileImage" style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:3px solid var(--primary);" alt="Profile" />
+        <div *ngIf="resumeData" class="dashboard-card resume-preview" [ngClass]="resumeSettings.resumeTemplate" id="resumePreview" style="padding:40px;">
+          
+          <!-- ========================================== -->
+          <!-- Template A: MODERN TWO-COLUMN GRID -->
+          <!-- ========================================== -->
+          <div *ngIf="resumeSettings.resumeTemplate === 'modern'" style="display: grid; grid-template-columns: 280px 1fr; gap: 32px; margin: -40px; border-radius: 12px; overflow: hidden; min-height: 900px;">
+            <!-- Left Sidebar -->
+            <div style="background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%); color: #ffffff; padding: 40px 24px; display: flex; flex-direction: column; gap: 24px;">
+              <div style="text-align: center;">
+                <div *ngIf="resumeData.employee.profileImage" style="margin-bottom:16px;">
+                  <img [src]="resumeData.employee.profileImage" style="width:100px; height:100px; border-radius:50%; object-fit:cover; border:3px solid var(--primary);" alt="Profile" />
+                </div>
+                <div *ngIf="!resumeData.employee.profileImage" style="width:100px; height:100px; border-radius:50%; background:linear-gradient(135deg, var(--primary), var(--primary-dark)); display:flex; align-items:center; justify-content:center; font-size:36px; font-weight:800; color:#fff; margin:0 auto 16px;">
+                  {{ resumeData.employee.firstName[0] }}
+                </div>
+                <h3 style="color:#fff; margin:0 0 4px; font-size:20px;">{{ resumeData.employee.firstName }} {{ resumeData.employee.lastName }}</h3>
+                <p style="color:#a5b4fc; margin:0; font-size:13px; font-weight:600;">{{ resumeData.employee.designation }}</p>
+                <p style="color:#94a3b8; margin:4px 0 0; font-size:11px;">{{ resumeData.employee.department }} · {{ resumeData.employee.employeeCode }}</p>
+              </div>
+
+              <!-- Contact Info -->
+              <div *ngIf="!resumeSettings.resumeHideContact" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px;">
+                <h5 style="color:#818cf8; text-transform:uppercase; font-size:11px; letter-spacing:1px; margin:0 0 10px;">Contact Details</h5>
+                <div style="font-size:12px; color:#cbd5e1; display:flex; flex-direction:column; gap:8px;">
+                  <div style="display:flex; align-items:center; gap:6px;"><span class="material-icons" style="font-size:14px; color:#818cf8;">email</span> {{ resumeData.employee.email }}</div>
+                  <div *ngIf="resumeData.employee.phone" style="display:flex; align-items:center; gap:6px;"><span class="material-icons" style="font-size:14px; color:#818cf8;">phone</span> {{ resumeData.employee.phone }}</div>
+                  <div style="display:flex; align-items:center; gap:6px;"><span class="material-icons" style="font-size:14px; color:#818cf8;">place</span> {{ resumeData.employee.workLocation }}</div>
+                  <div style="display:flex; align-items:center; gap:6px;"><span class="material-icons" style="font-size:14px; color:#818cf8;">badge</span> {{ resumeData.employee.workMode }} ({{ resumeData.employee.employmentType }})</div>
+                </div>
+              </div>
+
+              <!-- Languages -->
+              <div *ngIf="resumeData.languages?.length > 0" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px;">
+                <h5 style="color:#818cf8; text-transform:uppercase; font-size:11px; letter-spacing:1px; margin:0 0 10px;">Languages</h5>
+                <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                  <span *ngFor="let l of resumeData.languages" style="padding:3px 8px; background:rgba(255,255,255,0.08); border-radius:4px; font-size:11px; color:#e2e8f0;">
+                    {{ l.language }} ({{ l.proficiency }})
+                  </span>
+                </div>
+              </div>
+
+              <!-- Logos / QR code -->
+              <div *ngIf="resumeData.employee.companyLogoUrl || resumeData.employee.qrCodeUrl" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px; text-align:center;">
+                <img *ngIf="resumeData.employee.companyLogoUrl" [src]="resumeData.employee.companyLogoUrl" alt="Company logo" style="max-height:40px; margin-bottom:12px; filter: brightness(0) invert(1);" />
+                <div *ngIf="resumeData.employee.qrCodeUrl" style="background:#fff; padding:6px; border-radius:6px; display:inline-block;">
+                  <img [src]="resumeData.employee.qrCodeUrl" alt="QR code" style="width:80px; height:80px;" />
+                </div>
+              </div>
             </div>
-            <div *ngIf="!resumeData.employee.profileImage" style="flex-shrink:0; width:80px; height:80px; border-radius:50%; background:linear-gradient(135deg,var(--primary),var(--primary-dark)); display:flex; align-items:center; justify-content:center; font-size:32px; font-weight:800; color:#fff;">
-              {{ resumeData.employee.firstName[0] }}
-            </div>
-            <div style="flex:1;">
-              <h2 style="margin:0 0 4px; font-size:26px; letter-spacing:-0.5px;">{{ resumeData.employee.firstName }} {{ resumeData.employee.lastName }}</h2>
-              <p style="margin:0 0 2px; font-size:15px; color:var(--primary); font-weight:600;">{{ resumeData.employee.designation }}</p>
-              <p style="margin:0; font-size:13px; color:var(--text-muted);">{{ resumeData.employee.department }} · {{ resumeData.employee.employeeCode }}</p>
-            </div>
-            <div *ngIf="!resumeSettings.resumeHideContact" style="text-align:right; font-size:12px; color:var(--text-secondary); line-height:1.8;">
-              <div>{{ resumeData.employee.email }}</div>
-              <div *ngIf="resumeData.employee.phone">{{ resumeData.employee.phone }}</div>
-              <div>{{ resumeData.employee.workLocation }} · {{ resumeData.employee.workMode }}</div>
-              <div>{{ resumeData.employee.employmentType }}</div>
+
+            <!-- Right Content -->
+            <div style="padding: 40px 32px; display:flex; flex-direction:column; gap:24px;">
+              <!-- Auto Summary -->
+              <div *ngIf="resumeData.employee.autoSummary">
+                <h4 style="margin:0 0 8px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:2px solid var(--primary); padding-bottom:6px;">Professional Summary</h4>
+                <p style="font-size:13px; color:var(--text-secondary); line-height:1.8; margin:0; font-style:italic;">{{ resumeData.employee.autoSummary }}</p>
+              </div>
+
+              <!-- Career Objective -->
+              <div *ngIf="resumeData.employee.careerObjective">
+                <h4 style="margin:0 0 8px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:2px solid var(--primary); padding-bottom:6px;">Career Objective</h4>
+                <p style="font-size:13px; color:var(--text-secondary); line-height:1.8; margin:0;">{{ resumeData.employee.careerObjective }}</p>
+              </div>
+
+              <!-- Education -->
+              <div *ngIf="resumeData.employee.education">
+                <h4 style="margin:0 0 8px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:2px solid var(--primary); padding-bottom:6px;">Education</h4>
+                <div style="font-size:13px; color:var(--text-secondary); line-height:1.8; display:flex; align-items:center; gap:8px;">
+                  <span class="material-icons" style="font-size:16px; color:var(--primary);">school</span>
+                  <strong>{{ resumeData.employee.education }}</strong>
+                </div>
+              </div>
+
+              <!-- Skills inside main content in Modern style -->
+              <div *ngIf="resumeData.skills?.length > 0">
+                <h4 style="margin:0 0 12px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:2px solid var(--primary); padding-bottom:6px;">Technical Skills</h4>
+                <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:8px;">
+                  <div *ngFor="let s of resumeData.skills" style="padding:6px 10px; background:var(--surface-hover); border-radius:6px; border:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:12px; font-weight:600;">{{ s.name }}</span>
+                    <div *ngIf="!resumeSettings.resumeHideRatings" style="display:flex; gap:1px;">
+                      <span *ngFor="let i of [1,2,3,4,5]" class="material-icons" style="font-size:10px;" [style.color]="(s.finalRating || s.selfRating) >= i ? 'var(--primary)' : 'var(--border)'">star</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Project Experience -->
+              <div *ngIf="resumeData.projects?.length > 0">
+                <h4 style="margin:0 0 12px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:2px solid var(--primary); padding-bottom:6px;">Project Experience</h4>
+                <div style="display:grid; gap:12px;">
+                  <div *ngFor="let p of resumeData.projects" style="padding:12px 14px; border:1px solid var(--border); border-radius:8px; border-left:3px solid var(--primary);">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
+                      <strong style="font-size:13px;">{{ p.name }}</strong>
+                      <span style="font-size:11px; color:var(--text-muted);">{{ p.startDate | date:'MMM y' }} – {{ p.endDate ? (p.endDate | date:'MMM y') : 'Present' }}</span>
+                    </div>
+                    <p style="font-size:12px; color:var(--primary); font-weight:600; margin:0 0 4px;">{{ p.role }}</p>
+                    <p style="font-size:11px; color:var(--text-secondary); margin:0 0 6px;">{{ p.responsibilities }}</p>
+                    <div *ngIf="p.technologies" style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px;">
+                      <span *ngFor="let t of p.technologies.split(',')" style="font-size:9px; padding:1px 6px; background:var(--surface-hover); border:1px solid var(--border); border-radius:4px;">{{ t.trim() }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Training & Certifications -->
+              <div *ngIf="resumeData.trainings?.length > 0 || resumeData.certificates?.length > 0">
+                <h4 style="margin:0 0 12px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:2px solid var(--primary); padding-bottom:6px;">Training & Certifications</h4>
+                <div *ngFor="let t of resumeData.trainings" style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid rgba(0,0,0,0.02); font-size:12px;">
+                  <span><strong>{{ t.title }}</strong> <span style="color:var(--text-muted);">· {{ t.provider }}</span></span>
+                  <span style="color:var(--text-muted);">{{ t.completionDate | date:'MMM y' }}</span>
+                </div>
+                <div *ngFor="let c of resumeData.certificates" style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid rgba(0,0,0,0.02); font-size:12px;">
+                  <span><span class="material-icons" style="font-size:12px; color:var(--accent); vertical-align:middle; margin-right:3px;">verified</span> <strong>{{ c.name }}</strong> <span style="color:var(--text-muted);">· {{ c.issuer }}</span></span>
+                  <span style="color:var(--text-muted);">{{ c.issueDate | date:'MMM y' }}</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- Career Objective -->
-<div *ngIf="resumeData.employee.companyLogoUrl || resumeData.employee.qrCodeUrl" style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:24px;">
+          <!-- ========================================== -->
+          <!-- Template B: STANDARD SINGLE COLUMN LAYOUTS -->
+          <!-- ========================================== -->
+          <div *ngIf="resumeSettings.resumeTemplate !== 'modern'">
+            <!-- Header -->
+            <div style="display:flex; align-items:flex-start; gap:20px; margin-bottom:28px; padding-bottom:24px; border-bottom:2px solid var(--primary);">
+              <div *ngIf="resumeData.employee.profileImage" style="flex-shrink:0;">
+                <img [src]="resumeData.employee.profileImage" style="width:80px; height:80px; border-radius:50%; object-fit:cover; border:3px solid var(--primary);" alt="Profile" />
+              </div>
+              <div *ngIf="!resumeData.employee.profileImage" style="flex-shrink:0; width:80px; height:80px; border-radius:50%; background:linear-gradient(135deg,var(--primary),var(--primary-dark)); display:flex; align-items:center; justify-content:center; font-size:32px; font-weight:800; color:#fff;">
+                {{ resumeData.employee.firstName[0] }}
+              </div>
+              <div style="flex:1;">
+                <h2 style="margin:0 0 4px; font-size:26px; letter-spacing:-0.5px;">{{ resumeData.employee.firstName }} {{ resumeData.employee.lastName }}</h2>
+                <p style="margin:0 0 2px; font-size:15px; color:var(--primary); font-weight:600;">{{ resumeData.employee.designation }}</p>
+                <p style="margin:0; font-size:13px; color:var(--text-muted);">{{ resumeData.employee.department }} · {{ resumeData.employee.employeeCode }}</p>
+              </div>
+              <div *ngIf="!resumeSettings.resumeHideContact" style="text-align:right; font-size:12px; color:var(--text-secondary); line-height:1.8;">
+                <div>{{ resumeData.employee.email }}</div>
+                <div *ngIf="resumeData.employee.phone">{{ resumeData.employee.phone }}</div>
+                <div>{{ resumeData.employee.workLocation }} · {{ resumeData.employee.workMode }}</div>
+                <div>{{ resumeData.employee.employmentType }}</div>
+              </div>
+            </div>
+
+            <!-- Corporate Logos & QR Code -->
+            <div *ngIf="resumeData.employee.companyLogoUrl || resumeData.employee.qrCodeUrl" style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:24px;">
               <div *ngIf="resumeData.employee.companyLogoUrl" style="max-width:180px;">
                 <img [src]="resumeData.employee.companyLogoUrl" alt="Company logo" style="max-width:100%; height:auto; object-fit:contain;" />
               </div>
@@ -1026,118 +1197,136 @@ type TabId = "home" | "skills" | "assessments" | "training" | "tickets" | "setti
                 <img [src]="resumeData.employee.qrCodeUrl" alt="QR code" style="width:100px; height:100px; object-fit:contain;" />
               </div>
             </div>
+
+            <!-- Professional Summary (Auto-Generated) -->
+            <div *ngIf="resumeData.employee.autoSummary" style="margin-bottom:24px;">
+              <h4 style="margin:0 0 8px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px;">Professional Summary</h4>
+              <p style="font-size:13px; color:var(--text-secondary); line-height:1.8; margin:0; font-style:italic;">{{ resumeData.employee.autoSummary }}</p>
+            </div>
+
+            <!-- Career Objective -->
             <div *ngIf="resumeData.employee.careerObjective" style="margin-bottom:24px;">
-            <h4 style="margin:0 0 8px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px;">Career Objective</h4>
-            <p style="font-size:13px; color:var(--text-secondary); line-height:1.8; margin:0;">{{ resumeData.employee.careerObjective }}</p>
-          </div>
+              <h4 style="margin:0 0 8px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px;">Career Objective</h4>
+              <p style="font-size:13px; color:var(--text-secondary); line-height:1.8; margin:0;">{{ resumeData.employee.careerObjective }}</p>
+            </div>
 
-          <!-- Summary Stats -->
-          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:12px; margin-bottom:24px; padding:16px; background:var(--surface-hover); border-radius:10px;">
-            <div style="text-align:center;">
-              <div style="font-size:22px; font-weight:800; color:var(--primary);">{{ resumeData.summary.approvedSkills }}</div>
-              <div style="font-size:11px; color:var(--text-muted);">Verified Skills</div>
-            </div>
-            <div style="text-align:center;">
-              <div style="font-size:22px; font-weight:800; color:var(--secondary);">{{ resumeData.summary.completedTrainings }}</div>
-              <div style="font-size:11px; color:var(--text-muted);">Trainings Done</div>
-            </div>
-            <div style="text-align:center;">
-              <div style="font-size:22px; font-weight:800; color:var(--accent);">{{ resumeData.summary.verifiedCerts }}</div>
-              <div style="font-size:11px; color:var(--text-muted);">Certificates</div>
-            </div>
-            <div style="text-align:center;">
-              <div style="font-size:22px; font-weight:800; color:var(--success);">{{ resumeData.summary.totalProjects }}</div>
-              <div style="font-size:11px; color:var(--text-muted);">Projects</div>
-            </div>
-            <div style="text-align:center;">
-              <div style="font-size:22px; font-weight:800; color:var(--warning);">{{ resumeData.summary.careerReadiness }}%</div>
-              <div style="font-size:11px; color:var(--text-muted);">Career Ready</div>
-            </div>
-            <div style="text-align:center;">
-              <div style="font-size:22px; font-weight:800; color:var(--text-secondary);">{{ resumeData.employee.yearsOfExperience || 0 }}y</div>
-              <div style="font-size:11px; color:var(--text-muted);">Experience</div>
-            </div>
-          </div>
-
-          <!-- Skills -->
-          <div *ngIf="resumeData.skills?.length > 0" style="margin-bottom:24px;">
-            <h4 style="margin:0 0 12px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:1px solid var(--border); padding-bottom:8px;">Technical Skills</h4>
-            <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px;">
-              <div *ngFor="let s of resumeData.skills" style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--surface-hover); border-radius:8px; border:1px solid var(--border);">
-                <div>
-                  <span style="font-size:13px; font-weight:600;">{{ s.name }}</span>
-                  <span style="font-size:11px; color:var(--text-muted); display:block;">{{ s.category }}</span>
-                </div>
-                <div *ngIf="!resumeSettings.resumeHideRatings" style="display:flex; gap:2px;">
-                  <span *ngFor="let i of [1,2,3,4,5]" class="material-icons" style="font-size:12px;" [style.color]="(s.finalRating || s.selfRating) >= i ? 'var(--primary)' : 'var(--border)'">star</span>
-                </div>
-                <span *ngIf="s.verified" style="font-size:10px; background:rgba(34,197,94,0.12); color:var(--success); padding:2px 6px; border-radius:50px; font-weight:700;">✓</span>
+            <!-- Summary Stats -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:12px; margin-bottom:24px; padding:16px; background:var(--surface-hover); border-radius:10px;">
+              <div style="text-align:center;">
+                <div style="font-size:22px; font-weight:800; color:var(--primary);">{{ resumeData.summary.approvedSkills }}</div>
+                <div style="font-size:11px; color:var(--text-muted);">Verified Skills</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="font-size:22px; font-weight:800; color:var(--secondary);">{{ resumeData.summary.completedTrainings }}</div>
+                <div style="font-size:11px; color:var(--text-muted);">Trainings Done</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="font-size:22px; font-weight:800; color:var(--accent);">{{ resumeData.summary.verifiedCerts }}</div>
+                <div style="font-size:11px; color:var(--text-muted);">Certificates</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="font-size:22px; font-weight:800; color:var(--success);">{{ resumeData.summary.totalProjects }}</div>
+                <div style="font-size:11px; color:var(--text-muted);">Projects</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="font-size:22px; font-weight:800; color:var(--warning);">{{ resumeData.summary.careerReadiness }}%</div>
+                <div style="font-size:11px; color:var(--text-muted);">Career Ready</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="font-size:22px; font-weight:800; color:var(--text-secondary);">{{ resumeData.employee.yearsOfExperience || 0 }}y</div>
+                <div style="font-size:11px; color:var(--text-muted);">Experience</div>
               </div>
             </div>
-          </div>
 
-          <!-- Projects -->
-          <div *ngIf="resumeData.projects?.length > 0" style="margin-bottom:24px;">
-            <h4 style="margin:0 0 12px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:1px solid var(--border); padding-bottom:8px;">Project Experience</h4>
-            <div style="display:grid; gap:12px;">
-              <div *ngFor="let p of resumeData.projects" style="padding:14px 16px; border:1px solid var(--border); border-radius:10px; border-left:3px solid var(--primary);">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px; margin-bottom:6px;">
+            <!-- Skills -->
+            <div *ngIf="resumeData.skills?.length > 0" style="margin-bottom:24px;">
+              <h4 style="margin:0 0 12px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:1px solid var(--border); padding-bottom:8px;">Technical Skills</h4>
+              <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px;">
+                <div *ngFor="let s of resumeData.skills" style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--surface-hover); border-radius:8px; border:1px solid var(--border);">
                   <div>
-                    <strong style="font-size:14px;">{{ p.name }}</strong>
-                    <span *ngIf="p.client" style="font-size:12px; color:var(--text-muted);"> · {{ p.client }}</span>
+                    <span style="font-size:13px; font-weight:600;">{{ s.name }}</span>
+                    <span style="font-size:11px; color:var(--text-muted); display:block;">{{ s.category }}</span>
                   </div>
-                  <div style="font-size:12px; color:var(--text-muted);">{{ p.startDate | date:'MMM y' }} – {{ p.endDate ? (p.endDate | date:'MMM y') : 'Present' }}</div>
-                </div>
-                <p style="font-size:13px; color:var(--primary); font-weight:600; margin:0 0 4px;">{{ p.role }}</p>
-                <p *ngIf="p.responsibilities" style="font-size:12px; color:var(--text-secondary); margin:0 0 8px;">{{ p.responsibilities }}</p>
-                <div *ngIf="p.technologies" style="display:flex; flex-wrap:wrap; gap:4px;">
-                  <span *ngFor="let t of p.technologies.split(',')" style="font-size:10px; padding:2px 8px; background:var(--surface-hover); border:1px solid var(--border); border-radius:50px;">{{ t.trim() }}</span>
+                  <div *ngIf="!resumeSettings.resumeHideRatings" style="display:flex; gap:2px;">
+                    <span *ngFor="let i of [1,2,3,4,5]" class="material-icons" style="font-size:12px;" [style.color]="(s.finalRating || s.selfRating) >= i ? 'var(--primary)' : 'var(--border)'">star</span>
+                  </div>
+                  <span *ngIf="s.verified" style="font-size:10px; background:rgba(34,197,94,0.12); color:var(--success); padding:2px 6px; border-radius:50px; font-weight:700;">✓</span>
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- Trainings & Certifications -->
-          <div *ngIf="resumeData.trainings?.length > 0 || resumeData.certificates?.length > 0" style="margin-bottom:24px;">
-            <h4 style="margin:0 0 12px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:1px solid var(--border); padding-bottom:8px;">Training & Certifications</h4>
-            <div *ngFor="let t of resumeData.trainings" style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid rgba(0,0,0,0.04); font-size:13px;">
-              <div>
-                <strong>{{ t.title }}</strong>
-                <span style="color:var(--text-muted);"> · {{ t.provider }} · {{ t.skill }}</span>
+            <!-- Projects -->
+            <div *ngIf="resumeData.projects?.length > 0" style="margin-bottom:24px;">
+              <h4 style="margin:0 0 12px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:1px solid var(--border); padding-bottom:8px;">Project Experience</h4>
+              <div style="display:grid; gap:12px;">
+                <div *ngFor="let p of resumeData.projects" style="padding:14px 16px; border:1px solid var(--border); border-radius:10px; border-left:3px solid var(--primary);">
+                  <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px; margin-bottom:6px;">
+                    <div>
+                      <strong style="font-size:14px;">{{ p.name }}</strong>
+                      <span *ngIf="p.client" style="font-size:12px; color:var(--text-muted);"> · {{ p.client }}</span>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted);">{{ p.startDate | date:'MMM y' }} – {{ p.endDate ? (p.endDate | date:'MMM y') : 'Present' }}</div>
+                  </div>
+                  <p style="font-size:13px; color:var(--primary); font-weight:600; margin:0 0 4px;">{{ p.role }}</p>
+                  <p *ngIf="p.responsibilities" style="font-size:12px; color:var(--text-secondary); margin:0 0 8px;">{{ p.responsibilities }}</p>
+                  <div *ngIf="p.technologies" style="display:flex; flex-wrap:wrap; gap:4px;">
+                    <span *ngFor="let t of p.technologies.split(',')" style="font-size:10px; padding:2px 8px; background:var(--surface-hover); border:1px solid var(--border); border-radius:50px;">{{ t.trim() }}</span>
+                  </div>
+                </div>
               </div>
-              <span style="color:var(--text-muted); white-space:nowrap;">{{ t.completionDate | date:'MMM y' }}</span>
             </div>
-            <div *ngFor="let c of resumeData.certificates" style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid rgba(0,0,0,0.04); font-size:13px;">
-              <div>
-                <span class="material-icons" style="font-size:14px; color:var(--accent); vertical-align:middle; margin-right:4px;">verified</span>
-                <strong>{{ c.name }}</strong>
-                <span style="color:var(--text-muted);"> · {{ c.issuer }}</span>
-              </div>
-              <span style="color:var(--text-muted); white-space:nowrap;">{{ c.issueDate | date:'MMM y' }}</span>
-            </div>
-          </div>
 
-          <!-- Achievements -->
-          <div *ngIf="resumeData.achievements?.length > 0" style="margin-bottom:24px;">
-            <h4 style="margin:0 0 12px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:1px solid var(--border); padding-bottom:8px;">Awards & Achievements</h4>
-            <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px;">
-              <div *ngFor="let a of resumeData.achievements" style="display:flex; align-items:flex-start; gap:10px; padding:10px; background:rgba(251,191,36,0.05); border:1px solid rgba(251,191,36,0.2); border-radius:8px;">
-                <span class="material-icons" style="font-size:20px; color:#f59e0b; flex-shrink:0;">military_tech</span>
+            <!-- Education -->
+            <div *ngIf="resumeData.employee.education" style="margin-bottom:24px;">
+              <h4 style="margin:0 0 12px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:1px solid var(--border); padding-bottom:8px;">Education</h4>
+              <div style="font-size:13px; color:var(--text-secondary); line-height:1.8; margin:0; display:flex; align-items:center; gap:8px;">
+                <span class="material-icons" style="font-size:16px; color:var(--primary);">school</span>
+                <strong>{{ resumeData.employee.education }}</strong>
+              </div>
+            </div>
+
+            <!-- Trainings & Certifications -->
+            <div *ngIf="resumeData.trainings?.length > 0 || resumeData.certificates?.length > 0" style="margin-bottom:24px;">
+              <h4 style="margin:0 0 12px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:1px solid var(--border); padding-bottom:8px;">Training & Certifications</h4>
+              <div *ngFor="let t of resumeData.trainings" style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid rgba(0,0,0,0.04); font-size:13px;">
                 <div>
-                  <strong style="font-size:13px; display:block;">{{ a.name }}</strong>
-                  <span style="font-size:11px; color:var(--text-muted);">{{ a.awardedDate | date:'MMM y' }}</span>
+                  <strong>{{ t.title }}</strong>
+                  <span style="color:var(--text-muted);"> · {{ t.provider }} · {{ t.skill }}</span>
+                </div>
+                <span style="color:var(--text-muted); white-space:nowrap;">{{ t.completionDate | date:'MMM y' }}</span>
+              </div>
+              <div *ngFor="let c of resumeData.certificates" style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid rgba(0,0,0,0.04); font-size:13px;">
+                <div>
+                  <span class="material-icons" style="font-size:14px; color:var(--accent); vertical-align:middle; margin-right:4px;">verified</span>
+                  <strong>{{ c.name }}</strong>
+                  <span style="color:var(--text-muted);"> · {{ c.issuer }}</span>
+                </div>
+                <span style="color:var(--text-muted); white-space:nowrap;">{{ c.issueDate | date:'MMM y' }}</span>
+              </div>
+            </div>
+
+            <!-- Achievements -->
+            <div *ngIf="resumeData.achievements?.length > 0" style="margin-bottom:24px;">
+              <h4 style="margin:0 0 12px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:1px solid var(--border); padding-bottom:8px;">Awards & Achievements</h4>
+              <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px;">
+                <div *ngFor="let a of resumeData.achievements" style="display:flex; align-items:flex-start; gap:10px; padding:10px; background:rgba(251,191,36,0.05); border:1px solid rgba(251,191,36,0.2); border-radius:8px;">
+                  <span class="material-icons" style="font-size:20px; color:#f59e0b; flex-shrink:0;">military_tech</span>
+                  <div>
+                    <strong style="font-size:13px; display:block;">{{ a.name }}</strong>
+                    <span style="font-size:11px; color:var(--text-muted);">{{ a.awardedDate | date:'MMM y' }}</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- Languages -->
-          <div *ngIf="resumeData.languages?.length > 0" style="margin-bottom:0;">
-            <h4 style="margin:0 0 10px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:1px solid var(--border); padding-bottom:8px;">Languages</h4>
-            <div style="display:flex; flex-wrap:wrap; gap:8px;">
-              <span *ngFor="let l of resumeData.languages" style="padding:4px 14px; background:var(--surface-hover); border:1px solid var(--border); border-radius:50px; font-size:12px;">
-                {{ l.language }} <span style="color:var(--text-muted);">({{ l.proficiency }})</span>
-              </span>
+            <!-- Languages -->
+            <div *ngIf="resumeData.languages?.length > 0" style="margin-bottom:0;">
+              <h4 style="margin:0 0 10px; color:var(--primary); text-transform:uppercase; font-size:12px; letter-spacing:1.5px; border-bottom:1px solid var(--border); padding-bottom:8px;">Languages</h4>
+              <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                <span *ngFor="let l of resumeData.languages" style="padding:4px 14px; background:var(--surface-hover); border:1px solid var(--border); border-radius:50px; font-size:12px;">
+                  {{ l.language }} <span style="color:var(--text-muted);">({{ l.proficiency }})</span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -1182,6 +1371,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   // Data
   mySkills: any[] = [];
   filteredSkills: any[] = [];
+  categories: any[] = [];
   myTraining: any[] = [];
   filteredTraining: any[] = [];
   myCertificates: any[] = [];
@@ -1234,6 +1424,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   ticketForm!: FormGroup;
   changePasswordForm!: FormGroup;
   feedbackForm!: FormGroup;
+  suggestSkillForm!: FormGroup;
 
   private routeSub!: Subscription;
 
@@ -1299,6 +1490,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.loadSubmissions();
     this.loadProjects();
     this.loadResumeData();
+    this.loadCategories();
   }
 
   loadStats() {
@@ -1419,6 +1611,36 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  loadCategories() {
+    this.dataService.getCategories().subscribe({
+      next: (r) => (this.categories = r.data || []),
+    });
+  }
+
+  openSuggestSkillModal() {
+    this.suggestSkillForm.reset({ skillType: "TECHNICAL" });
+    this.actionError = "";
+    this.openModal("suggestSkill", "Suggest New Skill");
+  }
+
+  onSaveSuggestSkill() {
+    if (this.suggestSkillForm.invalid) return;
+    const { skillName, categoryId, skillType, description } = this.suggestSkillForm.value;
+    const body = {
+      subject: `Suggested Skill Request: ${skillName}`,
+      category: "SKILL",
+      priority: "MEDIUM",
+      description: `${skillName} | ${categoryId} | ${skillType} | ${description}`
+    };
+    this.dataService.createTicket(body).subscribe({
+      next: () => {
+        alert("Thank you! Your skill suggestion has been submitted for admin review.");
+        this.closeModal();
+      },
+      error: (err) => (this.actionError = err?.error?.message || "Failed to submit suggestion.")
+    });
+  }
+
   saveResumeSettings() {
     this.resumeSaving = true;
     this.dataService.updateResumeSettings(this.resumeSettings).subscribe({
@@ -1439,6 +1661,11 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
 
     if (format === 'PRINT') {
       window.print();
+      return;
+    }
+
+    if (format === 'PDF') {
+      exportHtmlToPdf('resumePreview', `Resume_${this.resumeData.employee.firstName}_${this.resumeData.employee.lastName}`);
       return;
     }
 
@@ -1602,7 +1829,12 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     if (this.selfAssessForm.invalid) return;
     const body = { ...this.selfAssessForm.value, isDraft };
     this.dataService.submitSelfAssessment(this.selectedSkillForAssess.id, body).subscribe({
-      next: () => { this.closeModal(); this.loadSkills(); },
+      next: () => {
+        this.closeModal();
+        this.loadSkills();
+        this.loadStats();
+        this.loadCareerReadiness();
+      },
       error: (err) => (this.actionError = err?.error?.message || "Failed to submit."),
     });
   }
@@ -1618,9 +1850,14 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.dataService.getAssessmentById(id).subscribe({
       next: (r) => {
         this.activeAssessment = r.data;
+        if (this.activeAssessment && this.activeAssessment.questions) {
+          for (const q of this.activeAssessment.questions) {
+            q.parsedOptions = q.options ? q.options.split("|") : [];
+          }
+        }
         this.currentQuestionIndex = 0;
         this.selectedAnswers = [];
-        this.openModal("quiz", "Skill Assessment Quiz");
+        this.openModal("quiz", "Skill Assessment Quiz Tracker");
       },
       error: (err) => alert(err?.error?.message || "Failed to load assessment."),
     });
@@ -1631,6 +1868,10 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   }
 
   selectOption(idx: number) { this.selectedAnswers[this.currentQuestionIndex] = idx; }
+
+  trackByIndex(index: number, item: any) {
+    return index;
+  }
   prevQuestion() { if (this.currentQuestionIndex > 0) this.currentQuestionIndex--; }
   nextQuestion() {
     if (this.currentQuestionIndex < this.activeAssessment.questions.length - 1)
@@ -1655,6 +1896,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
         this.loadSkills();
         this.loadSubmissions();
         this.loadStats();
+        alert(r.data?.passed ? "PASSED" : "FAILED");
       },
       error: (err) => alert(err?.error?.message || "Failed to submit quiz."),
     });
@@ -1672,7 +1914,11 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   onSaveProgress() {
     if (this.progressForm.invalid) return;
     this.dataService.updateTrainingProgress(this.selectedPlanForProgress.id, this.progressForm.value).subscribe({
-      next: () => { this.closeModal(); this.loadTraining(); },
+      next: () => {
+        this.closeModal();
+        this.loadTraining();
+        this.loadStats();
+      },
       error: (err) => (this.actionError = err?.error?.message || "Failed to update."),
     });
   }
@@ -1702,7 +1948,11 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     });
 
     this.dataService.uploadCertificate(fd).subscribe({
-      next: () => { this.closeModal(); this.loadCertificates(); },
+      next: () => {
+        this.closeModal();
+        this.loadCertificates();
+        this.loadStats();
+      },
       error: (err) => (this.actionError = err?.error?.message || "Failed to upload."),
     });
   }
@@ -1719,7 +1969,11 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   onSaveTicket() {
     if (this.ticketForm.invalid) return;
     this.dataService.createTicket(this.ticketForm.value).subscribe({
-      next: () => { this.closeModal(); this.loadTickets(); },
+      next: () => {
+        this.closeModal();
+        this.loadTickets();
+        this.loadStats();
+      },
       error: (err) => (this.actionError = err?.error?.message || "Failed to create ticket."),
     });
   }
@@ -1806,6 +2060,12 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.feedbackForm = this.fb.group({
       category: ["INTERFACE", Validators.required],
       comments: ["", [Validators.required, Validators.minLength(10)]],
+    });
+    this.suggestSkillForm = this.fb.group({
+      skillName: ["", Validators.required],
+      categoryId: ["", Validators.required],
+      skillType: ["TECHNICAL", Validators.required],
+      description: ["", Validators.required],
     });
   }
 }

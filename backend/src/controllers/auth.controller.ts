@@ -118,12 +118,9 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     // Validate Portal vs Role
     // Portal options: "ADMIN_PORTAL", "MANAGER_PORTAL", "EMPLOYEE_PORTAL"
     let isPortalAuthorized = false;
-    if (portal === "ADMIN_PORTAL" && (user.role === SystemRole.SUPER_ADMIN || user.role === SystemRole.ADMIN_SUPPORT)) {
+    if (portal === "ADMIN_PORTAL" && user.role === SystemRole.ADMIN) {
       isPortalAuthorized = true;
-    } else if (
-      portal === "MANAGER_PORTAL" &&
-      ([SystemRole.MANAGER, SystemRole.SUPER_ADMIN, SystemRole.ADMIN_SUPPORT] as SystemRole[]).includes(user.role)
-    ) {
+    } else if (portal === "MANAGER_PORTAL" && user.role === SystemRole.MANAGER) {
       isPortalAuthorized = true;
     } else if (portal === "EMPLOYEE_PORTAL" && user.role === SystemRole.EMPLOYEE) {
       isPortalAuthorized = true;
@@ -141,7 +138,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       });
       return res.status(403).json({
         success: false,
-        message: "This account is not authorized for the selected portal. Use the correct portal for your role.",
+        message: "This account is not authorized for this portal.",
         code: "FORBIDDEN",
       });
     }

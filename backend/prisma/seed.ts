@@ -1,4 +1,4 @@
-import { PrismaClient, SystemRole, SkillType, SkillRatingStatus, RatingSource, TrainingStatus, CertificateStatus, TicketCategory, TicketPriority, TicketStatus, SlaStatus } from "@prisma/client";
+import { PrismaClient, SystemRole, SkillType, SkillRatingStatus, RatingSource, TrainingStatus, CertificateStatus, TicketCategory, TicketPriority, TicketStatus, SlaStatus, ProjectStatus, ProjectPriority, ProjectAssignmentStatus, LanguageProficiency } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("Starting database seeding...");
 
-  // Reset database before seeding
+  // Reset database before seeding (cascade delete where supported or sequential deletes)
   await prisma.errorLog.deleteMany({});
   await prisma.auditLog.deleteMany({});
   await prisma.savedFilter.deleteMany({});
@@ -15,9 +15,9 @@ async function main() {
   await prisma.notificationPreference.deleteMany({});
   await prisma.notification.deleteMany({});
   await prisma.ticketSlaHistory.deleteMany({});
-  await prisma.ticketStatusHistory.deleteMany({});
+  await prisma.ticketHistory.deleteMany({});
   await prisma.ticketAttachment.deleteMany({});
-  await prisma.ticketMessage.deleteMany({});
+  await prisma.ticketComment.deleteMany({});
   await prisma.supportTicket.deleteMany({});
   await prisma.careerPathSkill.deleteMany({});
   await prisma.careerPath.deleteMany({});
@@ -36,6 +36,11 @@ async function main() {
   await prisma.skillDependency.deleteMany({});
   await prisma.skill.deleteMany({});
   await prisma.skillCategory.deleteMany({});
+  await prisma.projectAssignment.deleteMany({});
+  await prisma.projectSkillRequirement.deleteMany({});
+  await prisma.project.deleteMany({});
+  await prisma.employeeLanguage.deleteMany({});
+  await prisma.resumeDownload.deleteMany({});
   await prisma.managerAssignmentHistory.deleteMany({});
   await prisma.managerAssignment.deleteMany({});
   await prisma.employee.deleteMany({});
@@ -56,20 +61,16 @@ async function main() {
   });
 
   // 2. Create Achievements / Badges
-  await prisma.achievement.create({
-    data: { name: "Quick Learner", description: "Complete a training plan within 7 days of assignment", badgeCode: "ACH_QUICK_LEARNER", pointValue: 150 },
-  });
-  await prisma.achievement.create({
-    data: { name: "Learning Streak", description: "Complete 3 training plans back-to-back", badgeCode: "ACH_STREAK", pointValue: 300 },
-  });
-  await prisma.achievement.create({
-    data: { name: "Skill Expert", description: "Attain Level 5 rating in any technical skill", badgeCode: "ACH_SKILL_EXPERT", pointValue: 200 },
-  });
-  await prisma.achievement.create({
-    data: { name: "Certified Professional", description: "Get a verified certificate approved", badgeCode: "ACH_CERTIFIED", pointValue: 100 },
+  await prisma.achievement.createMany({
+    data: [
+      { name: "Quick Learner", description: "Complete a training plan within 7 days of assignment", badgeCode: "ACH_QUICK_LEARNER", pointValue: 150 },
+      { name: "Learning Streak", description: "Complete 3 training plans back-to-back", badgeCode: "ACH_STREAK", pointValue: 300 },
+      { name: "Skill Expert", description: "Attain Level 5 rating in any technical skill", badgeCode: "ACH_SKILL_EXPERT", pointValue: 200 },
+      { name: "Certified Professional", description: "Get a verified certificate approved", badgeCode: "ACH_CERTIFIED", pointValue: 100 },
+    ],
   });
 
-  // 3. Create Departments (7)
+  // 3. Create Departments (8)
   const depts = [
     { code: "ENG", name: "Engineering", description: "Software development and infrastructure management" },
     { code: "DATA", name: "Data and Analytics", description: "Data science, database admin, and warehousing" },
@@ -78,6 +79,7 @@ async function main() {
     { code: "FIN", name: "Finance", description: "Company budgeting, accounts, and audits" },
     { code: "SAL", name: "Sales", description: "Enterprise client relationships and acquisitions" },
     { code: "PROD", name: "Product Management", description: "Product strategy, definitions, and roadmaps" },
+    { code: "OPS", name: "Operations", description: "Business logistics, infrastructure, and customer success" },
   ];
   const deptRecords = [];
   for (const d of depts) {
@@ -85,14 +87,16 @@ async function main() {
     deptRecords.push(dept);
   }
 
-  // Map departments helper
   const deptEng = deptRecords.find(d => d.code === "ENG")!;
   const deptData = deptRecords.find(d => d.code === "DATA")!;
   const deptQa = deptRecords.find(d => d.code === "QA")!;
   const deptHr = deptRecords.find(d => d.code === "HR")!;
+  const deptFin = deptRecords.find(d => d.code === "FIN")!;
+  const deptSal = deptRecords.find(d => d.code === "SAL")!;
   const deptProd = deptRecords.find(d => d.code === "PROD")!;
+  const deptOps = deptRecords.find(d => d.code === "OPS")!;
 
-  // 4. Create Designations (12)
+  // 4. Create Designations (15)
   const designations = [
     { code: "ENG_DIR", name: "Director of Engineering", departmentId: deptEng.id, level: 6 },
     { code: "ENG_MGR", name: "Engineering Manager", departmentId: deptEng.id, level: 5 },
@@ -109,6 +113,10 @@ async function main() {
     
     { code: "HR_MGR", name: "HR Manager", departmentId: deptHr.id, level: 5 },
     { code: "PROD_MGR", name: "Product Manager", departmentId: deptProd.id, level: 4 },
+    
+    { code: "OPS_MGR", name: "Operations Manager", departmentId: deptOps.id, level: 5 },
+    { code: "OPS_ASSOC", name: "Operations Associate", departmentId: deptOps.id, level: 3 },
+    { code: "OPS_ANALYST", name: "Operations Analyst", departmentId: deptOps.id, level: 3 },
   ];
   const desigRecords = [];
   for (const ds of designations) {
@@ -116,25 +124,25 @@ async function main() {
     desigRecords.push(desig);
   }
 
-  // Helper designations
   const desigEngMgr = desigRecords.find(d => d.code === "ENG_MGR")!;
   const desigJrEng = desigRecords.find(d => d.code === "ENG_JR")!;
   const desigDataMgr = desigRecords.find(d => d.code === "DATA_MGR")!;
   const desigDataSci = desigRecords.find(d => d.code === "DATA_SCI")!;
   const desigQaMgr = desigRecords.find(d => d.code === "QA_MGR")!;
   const desigHrMgr = desigRecords.find(d => d.code === "HR_MGR")!;
+  const desigOpsMgr = desigRecords.find(d => d.code === "OPS_MGR")!;
+  const desigOpsAssoc = desigRecords.find(d => d.code === "OPS_ASSOC")!;
 
-  // 5. Create Credentials (BCrypt Hashes)
-  const adminPass = await bcrypt.hash("Admin@2026", 12);
-  const supportPass = await bcrypt.hash("Support@2026", 12);
-  const managerPass = await bcrypt.hash("Manager@2026", 12);
-  const employeePass = await bcrypt.hash("Employee@2026", 12);
+  // 5. Encrypted Credentials
+  const adminPass = bcrypt.hashSync("Admin@2026", 10);
+  const managerPass = bcrypt.hashSync("Manager@2026", 10);
+  const employeePass = bcrypt.hashSync("Employee@2026", 10);
 
-  // 6. Create Users & Employees
+  // 6. Seed Users & Employees
   
-  // A. Super Admin
+  // A. Admin (1)
   const userAdmin = await prisma.user.create({
-    data: { email: "admin@skillsphere.local", passwordHash: adminPass, role: SystemRole.SUPER_ADMIN },
+    data: { email: "admin@skillsphere.local", passwordHash: adminPass, role: SystemRole.ADMIN },
   });
   const empAdmin = await prisma.employee.create({
     data: {
@@ -151,61 +159,22 @@ async function main() {
       workMode: "ONSITE",
       userId: userAdmin.id,
       profileCompletion: 80,
+      education: "Ph.D. in Computer Science, Massachusetts Institute of Technology (2012 - 2016)",
     },
   });
   await prisma.notificationPreference.create({ data: { userId: userAdmin.id } });
 
-  // B. Admin Support (2)
-  const userSupport1 = await prisma.user.create({
-    data: { email: "support@skillsphere.local", passwordHash: supportPass, role: SystemRole.ADMIN_SUPPORT },
-  });
-  await prisma.employee.create({
-    data: {
-      employeeCode: "EMP-002",
-      firstName: "Sarah",
-      lastName: "Connor",
-      email: "support@skillsphere.local",
-      phone: "555-0101",
-      departmentId: deptHr.id,
-      designationId: desigHrMgr.id,
-      dateOfJoining: new Date("2021-03-10"),
-      yearsOfExperience: 6.0,
-      workLocation: "London Office",
-      workMode: "HYBRID",
-      userId: userSupport1.id,
-      profileCompletion: 75,
-    },
-  });
-  await prisma.notificationPreference.create({ data: { userId: userSupport1.id } });
-
-  const userSupport2 = await prisma.user.create({
-    data: { email: "support2@skillsphere.local", passwordHash: supportPass, role: SystemRole.ADMIN_SUPPORT },
-  });
-  await prisma.employee.create({
-    data: {
-      employeeCode: "EMP-003",
-      firstName: "John",
-      lastName: "Doe",
-      email: "support2@skillsphere.local",
-      phone: "555-0102",
-      departmentId: deptHr.id,
-      designationId: desigHrMgr.id,
-      dateOfJoining: new Date("2022-07-22"),
-      yearsOfExperience: 4.5,
-      workLocation: "London Office",
-      workMode: "HYBRID",
-      userId: userSupport2.id,
-      profileCompletion: 70,
-    },
-  });
-  await prisma.notificationPreference.create({ data: { userId: userSupport2.id } });
-
-  // C. Managers (4)
+  // B. Managers (6)
+  // 1. manager@skillsphere.local (for E2E)
+  // 2. manager1@skillsphere.local (for demo credentials)
+  // 3-6. manager2..5
   const managersData = [
-    { code: "EMP-004", email: "manager@skillsphere.local", first: "David", last: "Miller", desig: desigEngMgr, dept: deptEng, exp: 9.5 },
-    { code: "EMP-005", email: "manager2@skillsphere.local", first: "Elena", last: "Rostova", desig: desigDataMgr, dept: deptData, exp: 8.0 },
-    { code: "EMP-006", email: "manager3@skillsphere.local", first: "Marcus", last: "Aurelius", desig: desigQaMgr, dept: deptQa, exp: 10.0 },
-    { code: "EMP-007", email: "manager4@skillsphere.local", first: "Julia", last: "Roberts", desig: desigHrMgr, dept: deptHr, exp: 7.5 },
+    { code: "EMP-002", email: "manager@skillsphere.local", first: "David", last: "Miller", desig: desigEngMgr, dept: deptEng, exp: 9.5, edu: "M.S. in Computer Science, Stanford University (2014 - 2016)" },
+    { code: "EMP-003", email: "manager1@skillsphere.local", first: "Elena", last: "Rostova", desig: desigDataMgr, dept: deptData, exp: 8.0, edu: "Ph.D. in Data Science, UC Berkeley (2015 - 2019)" },
+    { code: "EMP-004", email: "manager2@skillsphere.local", first: "Marcus", last: "Aurelius", desig: desigQaMgr, dept: deptQa, exp: 10.0, edu: "B.S. in Software Engineering, University of Rome (2010 - 2014)" },
+    { code: "EMP-005", email: "manager3@skillsphere.local", first: "Julia", last: "Roberts", desig: desigHrMgr, dept: deptHr, exp: 7.5, edu: "MBA in Human Resources, NYU Stern (2017 - 2019)" },
+    { code: "EMP-006", email: "manager4@skillsphere.local", first: "Thomas", last: "Anderson", desig: desigOpsMgr, dept: deptOps, exp: 8.5, edu: "B.S. in Cybernetics, Columbia University (2012 - 2016)" },
+    { code: "EMP-060", email: "manager5@skillsphere.local", first: "Sophia", last: "Loren", desig: desigEngMgr, dept: deptEng, exp: 11.0, edu: "M.S. in Information Systems, Carnegie Mellon University (2013 - 2015)" },
   ];
   
   const managerRecords = [];
@@ -228,26 +197,28 @@ async function main() {
         workMode: m.dept.code === "HR" ? "HYBRID" : "ONSITE",
         userId: user.id,
         profileCompletion: 85,
+        managerCapacity: 10,
+        education: m.edu,
       },
     });
     await prisma.notificationPreference.create({ data: { userId: user.id } });
     managerRecords.push(emp);
   }
 
-  // D. Employees (35)
+  // C. Employees (50 total: James Cole, Sarah Connor, plus 48 generated)
   const employeeRecords = [];
   
-  // Base Employee requested
-  const userBaseEmp = await prisma.user.create({
+  // employee@skillsphere.local
+  const userE2EEmp = await prisma.user.create({
     data: { email: "employee@skillsphere.local", passwordHash: employeePass, role: SystemRole.EMPLOYEE },
   });
-  const empBase = await prisma.employee.create({
+  const empE2E = await prisma.employee.create({
     data: {
-      employeeCode: "EMP-008",
+      employeeCode: "EMP-007",
       firstName: "James",
       lastName: "Cole",
       email: "employee@skillsphere.local",
-      phone: "555-0108",
+      phone: "555-0107",
       departmentId: deptEng.id,
       designationId: desigJrEng.id,
       managerId: managerRecords[0].id,
@@ -255,40 +226,73 @@ async function main() {
       yearsOfExperience: 2.5,
       workLocation: "Seattle Office",
       workMode: "HYBRID",
-      userId: userBaseEmp.id,
+      userId: userE2EEmp.id,
       profileCompletion: 60,
+      education: "B.S. in Computer Science, University of Washington (2019 - 2023)",
     },
   });
-  await prisma.notificationPreference.create({ data: { userId: userBaseEmp.id } });
-  employeeRecords.push(empBase);
+  await prisma.notificationPreference.create({ data: { userId: userE2EEmp.id } });
+  employeeRecords.push(empE2E);
 
-  // Load other 34 employees (evenly distributed)
-  const randomFirstNames = ["Alice", "Bob", "Charlie", "Diana", "Ethan", "Fiona", "George", "Hannah", "Ian", "Jane", "Kevin", "Lisa", "Matthew", "Natalie", "Oliver", "Patricia", "Quincy", "Rachel", "Steven", "Teresa", "Victor", "Wendy", "Xavier", "Yolanda", "Zachary", "Liam", "Sophia", "Noah", "Emma", "Lucas", "Olivia", "Mason", "Ava", "Logan"];
-  const randomLastNames = ["Smith", "Jones", "Brown", "Davis", "Wilson", "Taylor", "Thomas", "Moore", "Jackson", "Martin", "Lee", "Perez", "Thompson", "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson", "Walker", "Young", "Allen", "King", "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores", "Green", "Adams", "Nelson", "Baker"];
+  // employee1@skillsphere.local
+  const userDemoEmp = await prisma.user.create({
+    data: { email: "employee1@skillsphere.local", passwordHash: employeePass, role: SystemRole.EMPLOYEE },
+  });
+  const empDemo = await prisma.employee.create({
+    data: {
+      employeeCode: "EMP-008",
+      firstName: "Sarah",
+      lastName: "Connor",
+      email: "employee1@skillsphere.local",
+      phone: "555-0108",
+      departmentId: deptEng.id,
+      designationId: desigJrEng.id,
+      managerId: managerRecords[0].id,
+      dateOfJoining: new Date("2023-03-15"),
+      yearsOfExperience: 4.2,
+      workLocation: "Seattle Office",
+      workMode: "REMOTE",
+      userId: userDemoEmp.id,
+      profileCompletion: 70,
+      education: "B.S. in Information Systems, Seattle University (2017 - 2021)",
+    },
+  });
+  await prisma.notificationPreference.create({ data: { userId: userDemoEmp.id } });
+  employeeRecords.push(empDemo);
 
-  for (let i = 0; i < 34; i++) {
-    const code = `EMP-${String(i + 9).padStart(3, "0")}`;
+  const randomFirstNames = ["Alice", "Bob", "Charlie", "Diana", "Ethan", "Fiona", "George", "Hannah", "Ian", "Jane", "Kevin", "Lisa", "Matthew", "Natalie", "Oliver", "Patricia", "Quincy", "Rachel", "Steven", "Teresa", "Victor", "Wendy", "Xavier", "Yolanda", "Zachary", "Liam", "Sophia", "Noah", "Emma", "Lucas", "Olivia", "Mason", "Ava", "Logan", "Isabella", "Grace", "Jack", "Lily", "Leo", "Mia"];
+  const randomLastNames = ["Smith", "Jones", "Brown", "Davis", "Wilson", "Taylor", "Thomas", "Moore", "Jackson", "Martin", "Lee", "Perez", "Thompson", "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson", "Walker", "Young", "Allen", "King", "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores", "Green", "Adams", "Nelson", "Baker", "Carter", "Mitchell", "Roberts", "Gomez", "Phillips"];
+  const universities = ["UC Berkeley", "UT Austin", "Georgia Tech", "UIUC", "Carnegie Mellon", "Cornell", "Michigan", "Purdue", "Harvard", "Stanford"];
+
+  // Seed another 48 employees to make 50 total
+  for (let i = 0; i < 48; i++) {
+    const codeNumber = i + 9;
+    const code = `EMP-${String(codeNumber).padStart(3, "0")}`;
     const email = `employee${i + 2}@skillsphere.local`;
     const firstName = randomFirstNames[i % randomFirstNames.length];
     const lastName = randomLastNames[i % randomLastNames.length];
     
-    // Choose department and manager
+    // Distribute across departments and managers
     let dept = deptEng;
     let manager = managerRecords[0]; 
     let desig = desigJrEng;
 
-    if (i % 4 === 1) {
+    if (i % 5 === 1) {
       dept = deptData;
       manager = managerRecords[1];
       desig = desigDataSci;
-    } else if (i % 4 === 2) {
+    } else if (i % 5 === 2) {
       dept = deptQa;
       manager = managerRecords[2];
       desig = desigRecords.find(d => d.code === "QA_SR")!;
-    } else if (i % 4 === 3) {
+    } else if (i % 5 === 3) {
       dept = deptHr;
       manager = managerRecords[3];
       desig = desigHrMgr;
+    } else if (i % 5 === 4) {
+      dept = deptOps;
+      manager = managerRecords[4];
+      desig = desigOpsAssoc;
     }
 
     const user = await prisma.user.create({
@@ -311,10 +315,11 @@ async function main() {
         workMode: i % 2 === 0 ? "HYBRID" : "REMOTE",
         userId: user.id,
         profileCompletion: 50,
+        education: `B.S. in Software Engineering, ${universities[i % universities.length]} (2020 - 2024)`,
       },
     });
 
-    // Manager Assignments History log
+    // Record initial Manager Assignment
     await prisma.managerAssignment.create({
       data: {
         employeeId: emp.id,
@@ -327,138 +332,65 @@ async function main() {
     employeeRecords.push(emp);
   }
 
-  console.log(`Generated users. Staff Count: ${employeeRecords.length}`);
+  console.log(`Successfully generated ${employeeRecords.length} Employees and ${managerRecords.length} Managers.`);
 
-  // 6.5. Create Projects and Assign Employees
-  const projectsData = [
-    {
-      code: "PRJ-001",
-      name: "SkillSphere Resume Modernization",
-      description: "Update resume workflows with branded templates, career readiness scoring, and export support.",
-      clientName: "SkillSphere Internal",
-      status: "ACTIVE",
-      priority: "HIGH",
-      startDate: new Date("2026-03-01"),
-      endDate: new Date("2026-10-01"),
-      completionPercent: 42,
-      technologies: "Angular, Node.js, PostgreSQL, Prisma",
-      manager: managerRecords[0],
-    },
-    {
-      code: "PRJ-002",
-      name: "Employee Skill Mapping Portal",
-      description: "Build the employee and manager dashboards for skills, certifications, trainings and reports.",
-      clientName: "SkillSphere Client",
-      status: "ACTIVE",
-      priority: "CRITICAL",
-      startDate: new Date("2026-04-05"),
-      endDate: new Date("2026-09-30"),
-      completionPercent: 55,
-      technologies: "Angular, Express, Redis, Docker",
-      manager: managerRecords[1],
-    },
-    {
-      code: "PRJ-003",
-      name: "HR Learning Path Automation",
-      description: "Automate certification tracking, manager approvals, and training recommendations.",
-      clientName: "Corporate HR",
-      status: "PLANNING",
-      priority: "MEDIUM",
-      startDate: new Date("2026-08-01"),
-      endDate: new Date("2027-01-15"),
-      completionPercent: 12,
-      technologies: "Python, PostgreSQL, React",
-      manager: managerRecords[3],
-    },
-    {
-      code: "PRJ-004",
-      name: "Customer Success Analytics Dashboard",
-      description: "Create analytics views for employee progress, ticket SLA performance, and manager utilisation.",
-      clientName: "Customer Success",
-      status: "ON_HOLD",
-      priority: "LOW",
-      startDate: new Date("2025-11-15"),
-      endDate: new Date("2026-07-31"),
-      completionPercent: 80,
-      technologies: "Power BI, Node.js, SQL",
-      manager: managerRecords[2],
-    },
+  // 7. Create Projects (15)
+  const projectTitles = [
+    "SkillSphere Resume Modernization", "Employee Skill Mapping Portal", "HR Learning Path Automation",
+    "Customer Success Analytics Dashboard", "Enterprise Cloud Sync System", "Single Sign-On Integration",
+    "SLA Ticket Automation Engine", "Dynamic Charting Components", "Gamification System API",
+    "Global Staff CSV Importer", "Multi-Tenant Database Scaling", "Security Auditing Framework",
+    "Real-time Notification Broadcaster", "Training Provider Scheduler", "System Performance Profiler"
   ];
 
   const projectRecords = [];
-  for (const proj of projectsData) {
-    const existingProject = await prisma.project.findFirst({
-      where: { projectCode: proj.code },
-    });
+  for (let i = 0; i < 15; i++) {
+    const code = `PRJ-${String(i + 1).padStart(3, "0")}`;
+    const statusVal = i % 5 === 0 ? ProjectStatus.COMPLETED : i % 5 === 1 ? ProjectStatus.PLANNING : i % 5 === 3 ? ProjectStatus.ON_HOLD : ProjectStatus.ACTIVE;
+    const prioVal = i % 3 === 0 ? ProjectPriority.CRITICAL : i % 3 === 1 ? ProjectPriority.HIGH : ProjectPriority.MEDIUM;
+    const completion = statusVal === ProjectStatus.COMPLETED ? 100 : i % 5 === 1 ? 0 : 20 + (i * 5);
 
-    const project = existingProject || await prisma.project.create({
+    const project = await prisma.project.create({
       data: {
-        projectCode: proj.code,
-        name: proj.name,
-        description: proj.description,
-        clientName: proj.clientName,
-        status: proj.status as any,
-        priority: proj.priority as any,
-        startDate: proj.startDate,
-        endDate: proj.endDate,
-        completionPercent: proj.completionPercent,
-        technologies: proj.technologies,
-        managerId: proj.manager.id,
+        projectCode: code,
+        name: projectTitles[i],
+        description: `Project focus: building the ${projectTitles[i].toLowerCase()} framework including design, specs, database schemas, and Angular components.`,
+        clientName: i % 2 === 0 ? "SkillSphere Internal" : "Corporate Client " + i,
+        status: statusVal,
+        priority: prioVal,
+        startDate: new Date("2026-01-01"),
+        endDate: new Date("2026-12-31"),
+        completionPercent: completion,
+        technologies: "Angular, Node.js, Express, Postgres, TypeScript",
+        managerId: managerRecords[i % managerRecords.length].id,
         createdById: userAdmin.id,
       },
     });
     projectRecords.push(project);
   }
+  console.log(`Generated ${projectRecords.length} Projects.`);
 
-  const assignmentRoles = ["Developer", "QA Engineer", "Data Analyst", "HR Lead"];
-  let assignCount = 0;
-  for (const project of projectRecords) {
-    const assignedMembers = employeeRecords.slice(assignCount, assignCount + 5);
-    for (let i = 0; i < assignedMembers.length; i++) {
-      await prisma.projectAssignment.create({
-        data: {
-          projectId: project.id,
-          employeeId: assignedMembers[i].id,
-          role: assignmentRoles[i % assignmentRoles.length],
-          responsibilities: `Own the ${assignmentRoles[i % assignmentRoles.length]} workstream and collaborate with cross-functional teams.`,
-          contributionPercent: 80 - i * 10,
-          status: i === 0 ? "ACTIVE" : "ACTIVE",
-          joinedAt: new Date("2026-05-01"),
-          assignedById: project.managerId || userAdmin.id,
-        },
-      });
-    }
-    assignCount += 3;
-  }
-
-  // Create resume download history to show report data
-  for (let i = 0; i < 10; i++) {
-    const downloadEmployee = employeeRecords[i % employeeRecords.length];
-    await prisma.resumeDownload.create({
+  // 8. Create Project Assignments
+  const rolesList = ["Developer", "QA Engineer", "Database Engineer", "Business Analyst", "Architect"];
+  for (let i = 0; i < employeeRecords.length; i++) {
+    const employee = employeeRecords[i];
+    const project = projectRecords[i % projectRecords.length];
+    await prisma.projectAssignment.create({
       data: {
-        employeeId: downloadEmployee.id,
-        downloadedById: userSupport1.id,
-        template: i % 2 === 0 ? "compact" : "modern",
-        format: i % 3 === 0 ? "PDF" : "DOCX",
+        projectId: project.id,
+        employeeId: employee.id,
+        role: rolesList[i % rolesList.length],
+        responsibilities: "Responsible for core components, integration tests, and weekly status updates.",
+        contributionPercent: 50 + (i % 6) * 10,
+        status: ProjectAssignmentStatus.ACTIVE,
+        joinedAt: new Date("2026-03-01"),
+        assignedById: project.managerId || empAdmin.id,
       },
     });
   }
+  console.log(`Assigned ${employeeRecords.length} Employees to Projects.`);
 
-  // Create employee language skills for resume completeness
-  for (let i = 0; i < 15; i++) {
-    const emp = employeeRecords[i % employeeRecords.length];
-    await prisma.employeeLanguage.create({
-      data: {
-        employeeId: emp.id,
-        language: i % 3 === 0 ? "English" : i % 3 === 1 ? "Spanish" : "French",
-        proficiency: i % 2 === 0 ? "FLUENT" : "CONVERSATIONAL",
-      },
-    });
-  }
-
-  console.log(`Created projects and assignments: ${projectRecords.length} projects`);
-
-  // 7. Create Skill Categories (5)
+  // 9. Create Skill Categories (5)
   const categories = ["Programming", "Cloud & DevOps", "Databases", "Quality Assurance", "Soft Skills & Leadership"];
   const catRecords = [];
   for (const c of categories) {
@@ -466,48 +398,42 @@ async function main() {
     catRecords.push(cat);
   }
 
-  const catProg = catRecords[0];
-  const catCloud = catRecords[1];
-  const catDb = catRecords[2];
-  const catQa = catRecords[3];
-  const catSoft = catRecords[4];
-
-  // 8. Create Skills (30)
+  // 10. Create Skills (30)
   const skillsData = [
-    { code: "SK-001", name: "Angular Frontend Development", cat: catProg, type: SkillType.TECHNICAL, req: 4 },
-    { code: "SK-002", name: "TypeScript & JavaScript ES6+", cat: catProg, type: SkillType.TECHNICAL, req: 3 },
-    { code: "SK-003", name: "Node.js REST API Architecture", cat: catProg, type: SkillType.TECHNICAL, req: 4 },
-    { code: "SK-004", name: "NestJS framework structure", cat: catProg, type: SkillType.TECHNICAL, req: 3 },
-    { code: "SK-005", name: "Python scripting", cat: catProg, type: SkillType.TECHNICAL, req: 2 },
+    { code: "SK-001", name: "Angular Frontend Development", cat: catRecords[0], type: SkillType.TECHNICAL, req: 4 },
+    { code: "SK-002", name: "TypeScript & JavaScript ES6+", cat: catRecords[0], type: SkillType.TECHNICAL, req: 3 },
+    { code: "SK-003", name: "Node.js REST API Architecture", cat: catRecords[0], type: SkillType.TECHNICAL, req: 4 },
+    { code: "SK-004", name: "NestJS framework structure", cat: catRecords[0], type: SkillType.TECHNICAL, req: 3 },
+    { code: "SK-005", name: "Python scripting", cat: catRecords[0], type: SkillType.TECHNICAL, req: 2 },
     
-    { code: "SK-006", name: "Docker Containerization", cat: catCloud, type: SkillType.TECHNICAL, req: 3 },
-    { code: "SK-007", name: "Kubernetes Orchestration", cat: catCloud, type: SkillType.TECHNICAL, req: 4 },
-    { code: "SK-008", name: "CI/CD Pipeline Configurations", cat: catCloud, type: SkillType.TECHNICAL, req: 3 },
-    { code: "SK-009", name: "AWS Cloud Infrastructure", cat: catCloud, type: SkillType.TECHNICAL, req: 4 },
-    { code: "SK-010", name: "Terraform Infrastructure as Code", cat: catCloud, type: SkillType.TECHNICAL, req: 3 },
+    { code: "SK-006", name: "Docker Containerization", cat: catRecords[1], type: SkillType.TECHNICAL, req: 3 },
+    { code: "SK-007", name: "Kubernetes Orchestration", cat: catRecords[1], type: SkillType.TECHNICAL, req: 4 },
+    { code: "SK-008", name: "CI/CD Pipeline Configurations", cat: catRecords[1], type: SkillType.TECHNICAL, req: 3 },
+    { code: "SK-009", name: "AWS Cloud Infrastructure", cat: catRecords[1], type: SkillType.TECHNICAL, req: 4 },
+    { code: "SK-010", name: "Terraform Infrastructure as Code", cat: catRecords[1], type: SkillType.TECHNICAL, req: 3 },
     
-    { code: "SK-011", name: "PostgreSQL Database Admin", cat: catDb, type: SkillType.TECHNICAL, req: 3 },
-    { code: "SK-012", name: "Redis Caching Layers", cat: catDb, type: SkillType.TECHNICAL, req: 3 },
-    { code: "SK-013", name: "MongoDB NoSQL schemas", cat: catDb, type: SkillType.TECHNICAL, req: 2 },
-    { code: "SK-014", name: "Prisma and Sequelize ORMs", cat: catDb, type: SkillType.TECHNICAL, req: 3 },
-    { code: "SK-015", name: "Apache Kafka Event Streams", cat: catDb, type: SkillType.TECHNICAL, req: 4 },
+    { code: "SK-011", name: "PostgreSQL Database Admin", cat: catRecords[2], type: SkillType.TECHNICAL, req: 3 },
+    { code: "SK-012", name: "Redis Caching Layers", cat: catRecords[2], type: SkillType.TECHNICAL, req: 3 },
+    { code: "SK-013", name: "MongoDB NoSQL schemas", cat: catRecords[2], type: SkillType.TECHNICAL, req: 2 },
+    { code: "SK-014", name: "Prisma and Sequelize ORMs", cat: catRecords[2], type: SkillType.TECHNICAL, req: 3 },
+    { code: "SK-015", name: "Apache Kafka Event Streams", cat: catRecords[2], type: SkillType.TECHNICAL, req: 4 },
     
-    { code: "SK-016", name: "Playwright Automated Testing", cat: catQa, type: SkillType.TECHNICAL, req: 3 },
-    { code: "SK-017", name: "Cypress Testing Suites", cat: catQa, type: SkillType.TECHNICAL, req: 3 },
-    { code: "SK-018", name: "Jest Backend Mocking", cat: catQa, type: SkillType.TECHNICAL, req: 3 },
-    { code: "SK-019", name: "Manual Exploratory Testing", cat: catQa, type: SkillType.FUNCTIONAL, req: 2 },
-    { code: "SK-020", name: "Performance testing with k6", cat: catQa, type: SkillType.TECHNICAL, req: 4 },
+    { code: "SK-016", name: "Playwright Automated Testing", cat: catRecords[3], type: SkillType.TECHNICAL, req: 3 },
+    { code: "SK-017", name: "Cypress Testing Suites", cat: catRecords[3], type: SkillType.TECHNICAL, req: 3 },
+    { code: "SK-018", name: "Jest Backend Mocking", cat: catRecords[3], type: SkillType.TECHNICAL, req: 3 },
+    { code: "SK-019", name: "Manual Exploratory Testing", cat: catRecords[3], type: SkillType.FUNCTIONAL, req: 2 },
+    { code: "SK-020", name: "Performance testing with k6", cat: catRecords[3], type: SkillType.TECHNICAL, req: 4 },
     
-    { code: "SK-021", name: "Team Leadership & Coordination", cat: catSoft, type: SkillType.LEADERSHIP, req: 4 },
-    { code: "SK-022", name: "Conflict Resolution", cat: catSoft, type: SkillType.BEHAVIORAL, req: 3 },
-    { code: "SK-023", name: "Effective Technical Writing", cat: catSoft, type: SkillType.FUNCTIONAL, req: 3 },
-    { code: "SK-024", name: "Enterprise Customer Engagement", cat: catSoft, type: SkillType.BEHAVIORAL, req: 3 },
-    { code: "SK-025", name: "Agile Scrum Master role", cat: catSoft, type: SkillType.LEADERSHIP, req: 4 },
-    { code: "SK-026", name: "UI/UX Design Wireframing", cat: catProg, type: SkillType.TECHNICAL, req: 3 },
-    { code: "SK-027", name: "Git Version Control Workflow", cat: catProg, type: SkillType.TECHNICAL, req: 3 },
-    { code: "SK-028", name: "GraphQL API integrations", cat: catProg, type: SkillType.TECHNICAL, req: 3 },
-    { code: "SK-029", name: "Linux Administration", cat: catCloud, type: SkillType.TECHNICAL, req: 3 },
-    { code: "SK-030", name: "OAuth2 & JWT Web Security", cat: catProg, type: SkillType.TECHNICAL, req: 4 },
+    { code: "SK-021", name: "Team Leadership & Coordination", cat: catRecords[4], type: SkillType.LEADERSHIP, req: 4 },
+    { code: "SK-022", name: "Conflict Resolution", cat: catRecords[4], type: SkillType.BEHAVIORAL, req: 3 },
+    { code: "SK-023", name: "Effective Technical Writing", cat: catRecords[4], type: SkillType.FUNCTIONAL, req: 3 },
+    { code: "SK-024", name: "Enterprise Customer Engagement", cat: catRecords[4], type: SkillType.BEHAVIORAL, req: 3 },
+    { code: "SK-025", name: "Agile Scrum Master role", cat: catRecords[4], type: SkillType.LEADERSHIP, req: 4 },
+    { code: "SK-026", name: "UI/UX Design Wireframing", cat: catRecords[0], type: SkillType.TECHNICAL, req: 3 },
+    { code: "SK-027", name: "Git Version Control Workflow", cat: catRecords[0], type: SkillType.TECHNICAL, req: 3 },
+    { code: "SK-028", name: "GraphQL API integrations", cat: catRecords[0], type: SkillType.TECHNICAL, req: 3 },
+    { code: "SK-029", name: "Linux Administration", cat: catRecords[1], type: SkillType.TECHNICAL, req: 3 },
+    { code: "SK-030", name: "OAuth2 & JWT Web Security", cat: catRecords[0], type: SkillType.TECHNICAL, req: 4 },
   ];
 
   const skillRecords = [];
@@ -523,275 +449,365 @@ async function main() {
     });
     skillRecords.push(skill);
   }
-  console.log(`Generated skills catalog: ${skillRecords.length}`);
+  console.log(`Generated ${skillRecords.length} Skills.`);
 
-  // Create Skill Dependencies
-  const skAngular = skillRecords.find(s => s.skillCode === "SK-001")!;
-  const skTypeScript = skillRecords.find(s => s.skillCode === "SK-002")!;
-  await prisma.skillDependency.create({
-    data: { skillId: skAngular.id, dependentSkillId: skTypeScript.id, dependencyType: "PREREQUISITE" },
-  });
+  // 10.5. Seed Role Skill Requirements for Designations
+  console.log("Seeding Role Skill Requirements for Designations...");
+  const skillMap = new Map(skillRecords.map(s => [s.skillCode, s.id]));
+  const desigMap = new Map(desigRecords.map(d => [d.code, d.id]));
 
-  // Role Skill requirements (Designation constraints)
-  for (const desig of desigRecords) {
-    if (desig.code === "ENG_JR" || desig.code === "ENG_SR") {
-      await prisma.roleSkillRequirement.createMany({
-        data: [
-          { designationId: desig.id, skillId: skillRecords[0].id, requiredLevel: desig.code === "ENG_SR" ? 4 : 2 },
-          { designationId: desig.id, skillId: skillRecords[1].id, requiredLevel: 3 },
-          { designationId: desig.id, skillId: skillRecords[2].id, requiredLevel: desig.code === "ENG_SR" ? 4 : 2 },
-        ],
+  const requirementsToSeed = [
+    // ENG_JR (Software Engineer)
+    { desig: "ENG_JR", skill: "SK-001", lvl: 3 }, // Angular
+    { desig: "ENG_JR", skill: "SK-002", lvl: 3 }, // TypeScript
+    { desig: "ENG_JR", skill: "SK-003", lvl: 3 }, // Node.js
+    { desig: "ENG_JR", skill: "SK-027", lvl: 3 }, // Git
+
+    // ENG_SR (Senior Software Engineer)
+    { desig: "ENG_SR", skill: "SK-001", lvl: 4 }, // Angular
+    { desig: "ENG_SR", skill: "SK-002", lvl: 4 }, // TypeScript
+    { desig: "ENG_SR", skill: "SK-003", lvl: 4 }, // Node.js
+    { desig: "ENG_SR", skill: "SK-006", lvl: 3 }, // Docker
+    { desig: "ENG_SR", skill: "SK-008", lvl: 3 }, // CI/CD
+    { desig: "ENG_SR", skill: "SK-030", lvl: 4 }, // OAuth2
+
+    // ENG_MGR (Engineering Manager)
+    { desig: "ENG_MGR", skill: "SK-021", lvl: 4 }, // Team Leadership
+    { desig: "ENG_MGR", skill: "SK-022", lvl: 4 }, // Conflict Resolution
+    { desig: "ENG_MGR", skill: "SK-025", lvl: 4 }, // Scrum Master
+    { desig: "ENG_MGR", skill: "SK-002", lvl: 3 }, // TypeScript
+
+    // DATA_SCI (Data Scientist)
+    { desig: "DATA_SCI", skill: "SK-005", lvl: 4 }, // Python
+    { desig: "DATA_SCI", skill: "SK-011", lvl: 3 }, // Postgres
+    { desig: "DATA_SCI", skill: "SK-012", lvl: 3 }, // Redis
+
+    // QA_SR (Senior QA Automation Engineer)
+    { desig: "QA_SR", skill: "SK-016", lvl: 4 }, // Playwright
+    { desig: "QA_SR", skill: "SK-017", lvl: 4 }, // Cypress
+    { desig: "QA_SR", skill: "SK-018", lvl: 4 }, // Jest
+
+    // QA_JR (QA Tester)
+    { desig: "QA_JR", skill: "SK-019", lvl: 3 }, // Manual Testing
+    { desig: "QA_JR", skill: "SK-017", lvl: 2 }, // Cypress
+
+    // HR_MGR (HR Manager)
+    { desig: "HR_MGR", skill: "SK-021", lvl: 4 }, // Team Leadership
+    { desig: "HR_MGR", skill: "SK-022", lvl: 4 }, // Conflict Resolution
+
+    // OPS_ASSOC (Operations Associate)
+    { desig: "OPS_ASSOC", skill: "SK-023", lvl: 3 }, // Technical Writing
+    { desig: "OPS_ASSOC", skill: "SK-024", lvl: 3 }  // Customer Engagement
+  ];
+
+  for (const req of requirementsToSeed) {
+    const designationId = desigMap.get(req.desig);
+    const skillId = skillMap.get(req.skill);
+    if (designationId && skillId) {
+      await prisma.roleSkillRequirement.create({
+        data: {
+          designationId,
+          skillId,
+          requiredLevel: req.lvl
+        }
       });
     }
   }
+  console.log("Successfully seeded Role Skill Requirements.");
 
-  // 9. Generate Employee Skills (70 records)
-  let skillCount = 0;
-  for (let i = 0; i < 20; i++) {
-    const emp = employeeRecords[i];
+  // 11. Create Employee Skill Assignments (100) & Skill Rating History (50)
+  let skillAssignmentsCount = 0;
+  let historyLogsCount = 0;
+
+  // We loop over employees and skills to assign them
+  for (let eIdx = 0; eIdx < employeeRecords.length; eIdx++) {
+    const emp = employeeRecords[eIdx];
     
-    // Assign 3 to 4 skills each
-    for (let sIdx = 0; sIdx < 4; sIdx++) {
-      const sk = skillRecords[(i * 3 + sIdx) % skillRecords.length];
-      
-      const rating = 1 + (sIdx % 4); // self rating 1-4
-      let finalRating = rating;
-      let status: SkillRatingStatus = SkillRatingStatus.APPROVED;
-      
-      if (sIdx === 2) {
-        status = SkillRatingStatus.SUBMITTED; 
-        finalRating = 1;
-      } else if (sIdx === 3) {
-        status = SkillRatingStatus.REJECTED;
-        finalRating = 1;
-      }
+    // Assign 2 to 3 skills per employee
+    const skillsToAssign = 2 + (eIdx % 2); // 2 or 3
+    for (let sIdx = 0; sIdx < skillsToAssign; sIdx++) {
+      if (skillAssignmentsCount >= 150) break;
+      const sk = skillRecords[(eIdx * 2 + sIdx) % skillRecords.length];
 
-      const empSk = await prisma.employeeSkill.create({
+      const ratingVal = 1 + (sIdx % 4); // 1 to 4
+      const statusVal = sIdx === 0 ? SkillRatingStatus.APPROVED : sIdx === 1 ? SkillRatingStatus.SUBMITTED : SkillRatingStatus.NEEDS_CHANGES;
+
+      const empSkill = await prisma.employeeSkill.create({
         data: {
           employeeId: emp.id,
           skillId: sk.id,
-          selfRating: rating,
-          finalRating,
-          status,
-          experienceMonths: 12 + sIdx * 6,
-          employeeComments: "Familiar with this technology.",
-          managerFeedback: status === SkillRatingStatus.REJECTED ? "Requires more proof of experience." : "Verified on team assignment.",
+          selfRating: ratingVal,
+          finalRating: statusVal === SkillRatingStatus.APPROVED ? ratingVal : 1,
+          status: statusVal,
+          experienceMonths: 6 + (eIdx * 2),
+          employeeComments: "Familiar with this skill from current and past client projects.",
+          managerFeedback: statusVal === SkillRatingStatus.APPROVED ? "Satisfactory performance reviewed." : undefined,
         },
       });
+      skillAssignmentsCount++;
 
-      // Rating history logs
-      await prisma.skillRatingHistory.create({
-        data: {
-          employeeSkillId: empSk.id,
-          rating,
-          source: RatingSource.SELF,
-          updatedById: emp.userId || empAdmin.userId!,
-        },
-      });
-
-      if (status === SkillRatingStatus.APPROVED) {
+      // Create history entries
+      if (historyLogsCount < 50) {
         await prisma.skillRatingHistory.create({
           data: {
-            employeeSkillId: empSk.id,
-            rating: finalRating,
-            source: RatingSource.MANAGER,
-            updatedById: managerRecords[0].userId!,
+            employeeSkillId: empSkill.id,
+            rating: ratingVal,
+            source: RatingSource.SELF,
+            updatedById: emp.userId || userAdmin.id,
+            comments: "Self assessment rating submitted.",
           },
         });
+        historyLogsCount++;
+
+        if (statusVal === SkillRatingStatus.APPROVED && historyLogsCount < 50) {
+          await prisma.skillRatingHistory.create({
+            data: {
+              employeeSkillId: empSkill.id,
+              rating: ratingVal,
+              source: RatingSource.MANAGER,
+              updatedById: managerRecords[0].userId!,
+              comments: "Manager approved.",
+            },
+          });
+          historyLogsCount++;
+        }
       }
-
-      skillCount++;
-      if (skillCount >= 70) break;
     }
-    if (skillCount >= 70) break;
   }
-  console.log(`Generated employee skill levels: ${skillCount}`);
 
-  // 10. Learning Paths
-  const lPath = await prisma.learningPath.create({
-    data: { pathName: "Frontend Engineering Path", description: "Path to master modern Angular frontend applications.", durationWeeks: 12 },
-  });
-  await prisma.learningPathItem.createMany({
-    data: [
-      { learningPathId: lPath.id, skillId: skTypeScript.id, sortOrder: 1, milestoneName: "TypeScript basics", durationWeeks: 4 },
-      { learningPathId: lPath.id, skillId: skAngular.id, sortOrder: 2, milestoneName: "Angular CLI & Modules", durationWeeks: 8 },
-    ],
-  });
+  // Ensure we reach exactly 50 history logs
+  while (historyLogsCount < 50) {
+    const firstEmpSkill = await prisma.employeeSkill.findFirst();
+    if (firstEmpSkill) {
+      await prisma.skillRatingHistory.create({
+        data: {
+          employeeSkillId: firstEmpSkill.id,
+          rating: 3,
+          source: RatingSource.SYSTEM,
+          updatedById: userAdmin.id,
+          comments: "System auto-check status updated.",
+        },
+      });
+      historyLogsCount++;
+    }
+  }
 
-  // Assign learning path to base employee
-  await prisma.employeeLearningPath.create({
-    data: {
-      employeeId: empBase.id,
-      learningPathId: lPath.id,
-      status: "IN_PROGRESS",
-      progressPercentage: 50,
-    },
-  });
+  console.log(`Generated ${skillAssignmentsCount} Employee Skill Assignments and ${historyLogsCount} History Logs.`);
 
-  // 11. Create Training Providers & Plans (35)
+  // 12. Create Training Provider
   const provider = await prisma.trainingProvider.create({
-    data: { name: "Udemy Corporate", contactPerson: "John Tech", email: "corp@udemy.com" },
+    data: { name: "Udemy Corporate Portal", contactPerson: "John Doe", email: "corp@udemy.com", phone: "555-9000" },
   });
 
-  let planCount = 0;
-  for (let i = 0; i < 15; i++) {
+  // 13. Create Training Plans (40)
+  const trainingStatuses = [
+    TrainingStatus.ASSIGNED, TrainingStatus.NOT_STARTED, TrainingStatus.IN_PROGRESS,
+    TrainingStatus.ON_HOLD, TrainingStatus.SUBMITTED_FOR_REVIEW, TrainingStatus.COMPLETED,
+    TrainingStatus.VERIFIED, TrainingStatus.OVERDUE, TrainingStatus.CANCELLED
+  ];
+  for (let i = 0; i < 40; i++) {
     const emp = employeeRecords[i % employeeRecords.length];
-    
-    // Overdue training plan (due in past)
+    const sk = skillRecords[i % skillRecords.length];
+    const statusVal = trainingStatuses[i % trainingStatuses.length];
+
     await prisma.trainingPlan.create({
       data: {
-        trainingCode: `TR-${100 + planCount}`,
-        trainingTitle: "Advanced Systems Operations",
+        trainingCode: `TRN-${100 + i}`,
+        trainingTitle: `Upskilling Program for ${sk.skillName}`,
+        description: "Official corporate training module designed to bridge competency gaps.",
         employeeId: emp.id,
-        skillId: skillRecords[5].id,
-        assignedById: managerRecords[0].id,
+        skillId: sk.id,
+        assignedById: managerRecords[i % managerRecords.length].id,
         providerId: provider.id,
         startDate: new Date("2026-05-01"),
-        dueDate: new Date("2026-06-01"),
-        progress: 40,
-        status: TrainingStatus.OVERDUE,
-        estimatedHours: 20,
-      },
-    });
-    planCount++;
-
-    // Completed verified training
-    await prisma.trainingPlan.create({
-      data: {
-        trainingCode: `TR-${100 + planCount}`,
-        trainingTitle: "CI/CD Orchestrations",
-        employeeId: emp.id,
-        skillId: skillRecords[7].id,
-        assignedById: managerRecords[0].id,
-        providerId: provider.id,
-        startDate: new Date("2026-06-01"),
-        dueDate: new Date("2026-07-01"),
-        progress: 100,
-        status: TrainingStatus.VERIFIED,
+        dueDate: statusVal === TrainingStatus.OVERDUE ? new Date("2026-06-01") : new Date("2026-11-30"),
+        progress: statusVal === TrainingStatus.VERIFIED || statusVal === TrainingStatus.COMPLETED ? 100 : i % 2 === 0 ? 40 : 0,
+        status: statusVal,
         estimatedHours: 15,
-        completionDate: new Date("2026-06-25"),
+        cancellationReason: statusVal === TrainingStatus.CANCELLED ? "Change of target role assignments" : undefined,
       },
     });
-    planCount++;
-
-    // In Progress training
-    await prisma.trainingPlan.create({
-      data: {
-        trainingCode: `TR-${100 + planCount}`,
-        trainingTitle: "Effective Technical Writing Course",
-        employeeId: emp.id,
-        skillId: skillRecords[22].id,
-        assignedById: managerRecords[0].id,
-        providerId: provider.id,
-        startDate: new Date("2026-07-10"),
-        dueDate: new Date("2026-08-10"),
-        progress: 10,
-        status: TrainingStatus.IN_PROGRESS,
-        estimatedHours: 8,
-      },
-    });
-    planCount++;
-    if (planCount >= 35) break;
   }
-  console.log(`Generated training plans: ${planCount}`);
+  console.log("Generated 40 Training Plans.");
 
-  // 12. Certificates (20 records)
-  for (let i = 0; i < 20; i++) {
+  // 14. Create Certificates (25)
+  const certStatuses = [
+    CertificateStatus.VERIFIED, CertificateStatus.PENDING,
+    CertificateStatus.REJECTED, CertificateStatus.EXPIRED
+  ];
+  for (let i = 0; i < 25; i++) {
     const emp = employeeRecords[i % employeeRecords.length];
-    
-    let status: CertificateStatus = CertificateStatus.VERIFIED;
-    if (i === 18) status = CertificateStatus.PENDING;
-    else if (i === 19) status = CertificateStatus.REJECTED;
-
+    const statusVal = certStatuses[i % certStatuses.length];
     await prisma.certificate.create({
       data: {
         employeeId: emp.id,
-        certificateName: `AWS certified Solution Architect - Assoc-${i}`,
-        issuingOrganization: "Amazon Web Services",
-        issueDate: new Date("2025-05-15"),
-        expiryDate: new Date("2028-05-15"),
+        certificateName: `Professional Certification level ${i + 1}`,
+        issuingOrganization: "SkillSphere Global Accreditation",
+        issueDate: new Date("2025-06-01"),
+        expiryDate: statusVal === CertificateStatus.EXPIRED ? new Date("2026-01-01") : new Date("2028-06-01"),
         filePath: "uploads/certificates/mock_aws.pdf",
-        verificationStatus: status,
-        rejectionReason: status === CertificateStatus.REJECTED ? "Document upload is incomplete." : undefined,
+        verificationStatus: statusVal,
+        rejectionReason: statusVal === CertificateStatus.REJECTED ? "Uploaded file path is unreadable." : undefined,
+        verifiedById: statusVal === CertificateStatus.VERIFIED ? userAdmin.id : undefined,
+        verifiedDate: statusVal === CertificateStatus.VERIFIED ? new Date() : undefined,
       },
     });
   }
-  console.log("Generated certificates: 20");
+  console.log("Generated 25 Certificates.");
 
-  // 13. Support Tickets (25 records)
+  // 15. Create Employee Support Tickets (30) & comments, histories, attachments
   const ticketCategories = [
     TicketCategory.TRAINING, TicketCategory.SKILL, TicketCategory.ASSESSMENT,
     TicketCategory.CERTIFICATE, TicketCategory.MANAGER, TicketCategory.PROFILE,
     TicketCategory.LOGIN, TicketCategory.TECHNICAL, TicketCategory.ACCESS,
     TicketCategory.DEADLINE, TicketCategory.OTHER
   ];
+  const ticketPriorities = [TicketPriority.LOW, TicketPriority.MEDIUM, TicketPriority.HIGH, TicketPriority.CRITICAL];
+  const ticketStatuses = [
+    TicketStatus.OPEN, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS,
+    TicketStatus.WAITING_USER, TicketStatus.RESOLVED, TicketStatus.CLOSED, TicketStatus.REOPENED, TicketStatus.ESCALATED
+  ];
 
-  let tCount = 0;
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < 30; i++) {
     const emp = employeeRecords[i % employeeRecords.length];
-    const cat = ticketCategories[i % ticketCategories.length];
-    
-    let prio: TicketPriority = TicketPriority.MEDIUM;
-    if (i % 4 === 0) prio = TicketPriority.CRITICAL;
-    else if (i % 4 === 1) prio = TicketPriority.HIGH;
-    else if (i % 4 === 3) prio = TicketPriority.LOW;
+    const categoryVal = ticketCategories[i % ticketCategories.length];
+    const priorityVal = ticketPriorities[i % ticketPriorities.length];
+    const statusVal = ticketStatuses[i % ticketStatuses.length];
+    const numberStr = String(i + 1).padStart(6, "0");
 
-    let stat: TicketStatus = TicketStatus.OPEN;
-    if (i % 3 === 1) stat = TicketStatus.IN_PROGRESS;
-    else if (i % 3 === 2) stat = TicketStatus.RESOLVED;
-    if (i === 24) stat = TicketStatus.CLOSED;
-
-    let sla: SlaStatus = SlaStatus.WITHIN_SLA;
-    let breachReason = undefined;
-    if (i === 4 || i === 8) {
-      sla = SlaStatus.BREACHED;
-      breachReason = "First response took longer than priority window.";
-    }
-
-    const tNum = `TK-202607-000${String(i + 1).padStart(2, "0")}`;
     const slaDueDate = new Date();
-    slaDueDate.setHours(slaDueDate.getHours() + (prio === TicketPriority.CRITICAL ? 1 : prio === TicketPriority.HIGH ? 4 : prio === TicketPriority.MEDIUM ? 8 : 24));
+    slaDueDate.setHours(slaDueDate.getHours() + (priorityVal === TicketPriority.CRITICAL ? 1 : priorityVal === TicketPriority.HIGH ? 4 : 8));
 
     const ticket = await prisma.supportTicket.create({
       data: {
-        ticketNumber: tNum,
-        subject: `Issue regarding ${cat.toLowerCase().replace(/_/g, " ")}`,
-        description: `Employee profile details are not showing up correctly under settings for role allocations. Please help solve this bug in ${cat}.`,
-        category: cat,
-        priority: prio,
-        status: stat,
-        creatorId: emp.id,
-        assignedAdminId: userSupport1.id,
+        ticketNumber: `TKT-2026-${numberStr}`,
+        createdByUserId: emp.userId!,
+        createdByRole: SystemRole.EMPLOYEE,
+        employeeId: emp.id,
+        category: categoryVal,
+        subject: `Unable to modify skill requirement or certificate #${i}`,
+        description: `Encountered runtime database lock or upload constraints when attempting to update ${categoryVal.toLowerCase()}. Please help.`,
+        priority: priorityVal,
+        status: statusVal,
         slaDueDate,
-        slaStatus: sla,
-        breachReason,
+        slaStatus: i === 5 ? SlaStatus.BREACHED : SlaStatus.WITHIN_SLA,
+        assignedAdminId: userAdmin.id,
+        resolution: statusVal === TicketStatus.RESOLVED || statusVal === TicketStatus.CLOSED ? "Reset cache and synchronized profiles" : undefined,
+        resolvedAt: statusVal === TicketStatus.RESOLVED || statusVal === TicketStatus.CLOSED ? new Date() : undefined,
+        closedAt: statusVal === TicketStatus.CLOSED ? new Date() : undefined,
       },
     });
 
-    // Add status history
-    await prisma.ticketStatusHistory.create({
-      data: { ticketId: ticket.id, status: stat, updatedById: userSupport1.id },
+    // Add Ticket Comments
+    await prisma.ticketComment.create({
+      data: {
+        ticketId: ticket.id,
+        senderUserId: emp.userId!,
+        senderRole: SystemRole.EMPLOYEE,
+        message: "Having issues submitting this from my browser console, please check.",
+      },
     });
 
-    // Conversations / Messages
-    await prisma.ticketMessage.create({
-      data: { ticketId: ticket.id, senderId: emp.userId!, message: "I cannot update my profile skills properly. Can you review?", isInternal: false },
-    });
-
-    if (stat !== TicketStatus.OPEN) {
-      await prisma.ticketMessage.create({
-        data: { ticketId: ticket.id, senderId: userSupport1.id, message: "We are currently investigating. Standard SLA logs will be updated.", isInternal: false },
+    if (statusVal !== TicketStatus.OPEN) {
+      await prisma.ticketComment.create({
+        data: {
+          ticketId: ticket.id,
+          senderUserId: userAdmin.id,
+          senderRole: SystemRole.ADMIN,
+          message: "Standard support investigation active on this ticket.",
+        },
       });
-      await prisma.ticketMessage.create({
-        data: { ticketId: ticket.id, senderId: userSupport1.id, message: "Developer note: User profile completion needs database refresh.", isInternal: true }, 
+      // Internal note
+      await prisma.ticketComment.create({
+        data: {
+          ticketId: ticket.id,
+          senderUserId: userAdmin.id,
+          senderRole: SystemRole.ADMIN,
+          message: "Internal log: check PostgreSQL index lock issues on table mapping.",
+          isInternalNote: true,
+        },
       });
     }
 
-    tCount++;
-  }
-  console.log(`Generated support tickets: ${tCount}`);
+    // Add Ticket History
+    await prisma.ticketHistory.create({
+      data: {
+        ticketId: ticket.id,
+        action: "TICKET_CREATED",
+        newStatus: TicketStatus.OPEN,
+        newPriority: priorityVal,
+        performedByUserId: emp.userId!,
+        performedByRole: SystemRole.EMPLOYEE,
+        comment: "Support ticket opened.",
+      },
+    });
 
-  // 14. Audit logs (20)
+    if (statusVal === TicketStatus.ASSIGNED || statusVal === TicketStatus.IN_PROGRESS) {
+      await prisma.ticketHistory.create({
+        data: {
+          ticketId: ticket.id,
+          action: "TICKET_ASSIGNED",
+          oldStatus: TicketStatus.OPEN,
+          newStatus: TicketStatus.ASSIGNED,
+          performedByUserId: userAdmin.id,
+          performedByRole: SystemRole.ADMIN,
+          comment: "Assigned to administrator.",
+        },
+      });
+    }
+  }
+
+  // 16. Create Manager Support Tickets (10)
+  for (let i = 0; i < 10; i++) {
+    const mgr = managerRecords[i % managerRecords.length];
+    const categoryVal = ticketCategories[i % ticketCategories.length];
+    const priorityVal = ticketPriorities[i % ticketPriorities.length];
+    const statusVal = ticketStatuses[i % ticketStatuses.length];
+    const numberStr = String(i + 31).padStart(6, "0");
+
+    const slaDueDate = new Date();
+    slaDueDate.setHours(slaDueDate.getHours() + 8);
+
+    const ticket = await prisma.supportTicket.create({
+      data: {
+        ticketNumber: `TKT-2026-${numberStr}`,
+        createdByUserId: mgr.userId!,
+        createdByRole: SystemRole.MANAGER,
+        managerId: mgr.id,
+        category: categoryVal,
+        subject: `Manager portal database sync issue #${i}`,
+        description: `Team dashboard charts and capacity grids are not displaying correctly. Please investigate.`,
+        priority: priorityVal,
+        status: statusVal,
+        slaDueDate,
+        slaStatus: SlaStatus.WITHIN_SLA,
+        assignedAdminId: userAdmin.id,
+      },
+    });
+
+    await prisma.ticketComment.create({
+      data: {
+        ticketId: ticket.id,
+        senderUserId: mgr.userId!,
+        senderRole: SystemRole.MANAGER,
+        message: "Charts on my direct dashboard are showing old team details.",
+      },
+    });
+
+    await prisma.ticketHistory.create({
+      data: {
+        ticketId: ticket.id,
+        action: "TICKET_CREATED",
+        newStatus: TicketStatus.OPEN,
+        performedByUserId: mgr.userId!,
+        performedByRole: SystemRole.MANAGER,
+      },
+    });
+  }
+
+  console.log("Successfully generated Employee and Manager Support Tickets.");
+
+  // 17. Seed Audit Logs (20) & Notifications (15)
   for (let i = 0; i < 20; i++) {
     await prisma.auditLog.create({
       data: {
@@ -803,21 +819,20 @@ async function main() {
     });
   }
 
-  // 15. Create Notifications (15)
   for (let i = 0; i < 15; i++) {
     await prisma.notification.create({
       data: {
-        userId: userBaseEmp.id,
-        title: `Mock alert notification #${i}`,
-        message: `This is a dashboard notification warning of category code ${i}`,
+        userId: employeeRecords[0].userId!,
+        title: `Seeded notification alert #${i}`,
+        message: `This is a mock training or ticket status alert of code #${i}`,
         isRead: i < 5,
         type: "SYSTEM",
       },
     });
   }
 
-  // 16. Skill Assessments Seeding
-  console.log("Seeding Skill Assessments...");
+  // 18. Skill Assessments
+  console.log("Seeding Skill Verification Assessments...");
   const skJs = skillRecords.find(s => s.skillCode === "SK-002")!;
   const skSql = skillRecords.find(s => s.skillCode === "SK-011")!;
 
@@ -826,27 +841,12 @@ async function main() {
       title: "TypeScript & JavaScript ES6+ Certification Exam",
       description: "Assess your competency in variables scope, closure, primitives, promises, and array maps.",
       skillId: skJs.id,
-      passingScore: 66, // Needs 2/3 correct
+      passingScore: 66,
       questions: {
         create: [
-          {
-            questionText: "Which of the following is not a valid way to declare a variable in ES6?",
-            options: "var|let|const|def",
-            correctOption: 3,
-            points: 10
-          },
-          {
-            questionText: "What is the output of console.log(typeof null)?",
-            options: "null|undefined|object|string",
-            correctOption: 2,
-            points: 10
-          },
-          {
-            questionText: "Which method is used to map items of an array into a new array in ES6?",
-            options: "forEach|map|filter|reduce",
-            correctOption: 1,
-            points: 10
-          }
+          { questionText: "Which of the following is not a valid way to declare a variable in ES6?", options: "var|let|const|def", correctOption: 3, points: 10 },
+          { questionText: "What is the output of console.log(typeof null)?", options: "null|undefined|object|string", correctOption: 2, points: 10 },
+          { questionText: "Which method is used to map items of an array into a new array in ES6?", options: "forEach|map|filter|reduce", correctOption: 1, points: 10 }
         ]
       }
     }
@@ -860,35 +860,19 @@ async function main() {
       passingScore: 66,
       questions: {
         create: [
-          {
-            questionText: "Which SQL join returns all records when there is a match in either left or right table?",
-            options: "INNER JOIN|LEFT JOIN|RIGHT JOIN|FULL OUTER JOIN",
-            correctOption: 3,
-            points: 10
-          },
-          {
-            questionText: "What index type is the default in PostgreSQL for most tables?",
-            options: "Hash|B-Tree|GIN|GiST",
-            correctOption: 1,
-            points: 10
-          },
-          {
-            questionText: "Which clause is used to filter groups in a SQL SELECT statement?",
-            options: "WHERE|HAVING|GROUP BY|ORDER BY",
-            correctOption: 1,
-            points: 10
-          }
+          { questionText: "Which SQL join returns all records when there is a match in either left or right table?", options: "INNER JOIN|LEFT JOIN|RIGHT JOIN|FULL OUTER JOIN", correctOption: 3, points: 10 },
+          { questionText: "What index type is the default in PostgreSQL for most tables?", options: "Hash|B-Tree|GIN|GiST", correctOption: 1, points: 10 },
+          { questionText: "Which clause is used to filter groups in a SQL SELECT statement?", options: "WHERE|HAVING|GROUP BY|ORDER BY", correctOption: 1, points: 10 }
         ]
       }
     }
   });
 
-  // Seed a couple of mock submissions for initial charts
-  const testEmployee = employeeRecords[0]; // James Cole
+  // Seed a pass submission for James Cole
   await prisma.skillAssessmentSubmission.create({
     data: {
       assessmentId: jsAssessment.id,
-      employeeId: testEmployee.id,
+      employeeId: employeeRecords[0].id,
       score: 100,
       passed: true,
       answers: "[3, 2, 1]"

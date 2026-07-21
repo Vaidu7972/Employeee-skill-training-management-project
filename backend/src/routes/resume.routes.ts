@@ -5,6 +5,7 @@ import {
   updateResumeSettings,
   suggestResumeImprovements,
   trackResumeDownload,
+  getTeamSummary,
 } from "../controllers/resume.controller";
 import { authenticateJWT, requireRoles } from "../middlewares/auth.middleware";
 import { SystemRole } from "@prisma/client";
@@ -18,8 +19,16 @@ router.get("/:employeeId", authenticateJWT, generateResumeData);
 router.get(
   "/team/:managerId",
   authenticateJWT,
-  requireRoles([SystemRole.SUPER_ADMIN, SystemRole.MANAGER]),
+  requireRoles([SystemRole.ADMIN, SystemRole.MANAGER]),
   getTeamResumes
+);
+
+// Manager: get aggregated dashboard data for Team Resume
+router.get(
+  "/team-summary/:managerId",
+  authenticateJWT,
+  requireRoles([SystemRole.ADMIN, SystemRole.MANAGER]),
+  getTeamSummary
 );
 
 // Employee: save resume preferences (template, visibility toggles, career objective)
@@ -29,7 +38,7 @@ router.put("/settings", authenticateJWT, updateResumeSettings);
 router.put(
   "/feedback",
   authenticateJWT,
-  requireRoles([SystemRole.SUPER_ADMIN, SystemRole.MANAGER]),
+  requireRoles([SystemRole.ADMIN, SystemRole.MANAGER]),
   suggestResumeImprovements
 );
 

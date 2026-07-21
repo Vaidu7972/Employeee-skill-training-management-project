@@ -8,6 +8,10 @@ import {
   reportCertificates,
   reportTickets,
   reportDownloads,
+  reportDepartments,
+  reportTeams,
+  reportSkillGaps,
+  reportAudit,
   globalSearch,
 } from "../controllers/report.controller";
 import { authenticateJWT, requireRoles } from "../middlewares/auth.middleware";
@@ -15,7 +19,7 @@ import { SystemRole } from "@prisma/client";
 
 const router = Router();
 
-const adminOrManager = requireRoles([SystemRole.SUPER_ADMIN, SystemRole.MANAGER]);
+const adminOrManager = requireRoles([SystemRole.ADMIN, SystemRole.MANAGER]);
 
 // Global search
 router.get("/search", authenticateJWT, globalSearch);
@@ -28,6 +32,10 @@ router.get("/training",     authenticateJWT, adminOrManager, reportTraining);
 router.get("/skills",       authenticateJWT, adminOrManager, reportSkills);
 router.get("/certificates", authenticateJWT, adminOrManager, reportCertificates);
 router.get("/tickets",      authenticateJWT, adminOrManager, reportTickets);
-router.get("/downloads",    authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN]), reportDownloads);
+router.get("/departments",  authenticateJWT, adminOrManager, reportDepartments);
+router.get("/teams",        authenticateJWT, adminOrManager, reportTeams);
+router.get("/skillgaps",    authenticateJWT, adminOrManager, reportSkillGaps);
+router.get("/audit",        authenticateJWT, requireRoles([SystemRole.ADMIN]), reportAudit);
+router.get("/downloads",    authenticateJWT, requireRoles([SystemRole.ADMIN]), reportDownloads);
 
 export default router;

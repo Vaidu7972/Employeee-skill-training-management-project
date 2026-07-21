@@ -52,10 +52,10 @@ const upload = multer({
 router.get("/", authenticateJWT, getTickets);
 router.get("/:id", authenticateJWT, getTicketById);
 router.post("/", authenticateJWT, requireRoles([SystemRole.EMPLOYEE]), createTicket);
-router.put("/:id/assign", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN, SystemRole.ADMIN_SUPPORT]), assignTicket);
+router.put("/:id/assign", authenticateJWT, requireRoles([SystemRole.ADMIN, SystemRole.ADMIN]), assignTicket);
 router.put("/:id/escalate", authenticateJWT, requireRoles([SystemRole.MANAGER]), escalateTicket);
 router.post("/:id/messages", authenticateJWT, upload.single("file"), addTicketMessage);
-router.put("/:id/resolve", authenticateJWT, requireRoles([SystemRole.SUPER_ADMIN, SystemRole.ADMIN_SUPPORT, SystemRole.MANAGER]), resolveTicket);
+router.put("/:id/resolve", authenticateJWT, requireRoles([SystemRole.ADMIN, SystemRole.ADMIN, SystemRole.MANAGER]), resolveTicket);
 router.put("/:id/confirm", authenticateJWT, requireRoles([SystemRole.EMPLOYEE]), confirmResolution);
 router.put("/:id/reopen", authenticateJWT, requireRoles([SystemRole.EMPLOYEE]), reopenTicket);
 
