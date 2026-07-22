@@ -94,7 +94,7 @@ import { exportToCsv, exportToExcel, printTable, exportToPdf, exportHtmlToPdf } 
         <div class="dashboard-card">
           <div class="card-header">
             <h4>Recent Audit Logs</h4>
-            <span class="badge badge-primary">Security Logs</span>
+            <button class="btn btn-outline-sm" (click)="activeTab = 'logs'">View All Audit Logs</button>
           </div>
           <div class="table-responsive">
             <table class="table">
@@ -108,7 +108,7 @@ import { exportToCsv, exportToExcel, printTable, exportToPdf, exportHtmlToPdf } 
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let audit of auditLogs">
+                <tr *ngFor="let audit of auditLogs" (click)="openAuditDetailModal(audit)" style="cursor:pointer;" title="Click to view details">
                   <td>{{ audit.user?.email || 'SYSTEM' }}</td>
                   <td><span class="badge badge-info">{{ audit.action }}</span></td>
                   <td>{{ audit.component }}</td>
@@ -124,7 +124,7 @@ import { exportToCsv, exportToExcel, printTable, exportToPdf, exportHtmlToPdf } 
         <div class="dashboard-card">
           <div class="card-header">
             <h4>Recent System Errors</h4>
-            <span class="badge badge-error">Errors</span>
+            <button class="btn btn-outline-sm" (click)="activeTab = 'logs'">View All Error Logs</button>
           </div>
           <div class="table-responsive">
             <table class="table">
@@ -138,7 +138,7 @@ import { exportToCsv, exportToExcel, printTable, exportToPdf, exportHtmlToPdf } 
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let error of errorLogs">
+                <tr *ngFor="let error of errorLogs" (click)="openErrorDetailModal(error)" style="cursor:pointer;" title="Click to view details">
                   <td>{{ error.endpoint }}</td>
                   <td>{{ error.method }}</td>
                   <td class="text-error">{{ error.errorMessage }}</td>
@@ -516,7 +516,7 @@ import { exportToCsv, exportToExcel, printTable, exportToPdf, exportHtmlToPdf } 
       <!-- SKILL CATALOG TAB -->
       <!-- ======================================================= -->
       <div *ngIf="activeTab === 'skills'" class="tab-content">
-        <div style="display:grid; grid-template-columns: 2fr 1fr; gap:20px;">
+        <div class="responsive-grid-2col">
           <!-- Catalog List -->
           <div class="dashboard-card">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
@@ -586,7 +586,7 @@ import { exportToCsv, exportToExcel, printTable, exportToPdf, exportHtmlToPdf } 
       <!-- TRAINING & CERTIFICATES TAB -->
       <!-- ======================================================= -->
       <div *ngIf="activeTab === 'training'" class="tab-content">
-        <div style="display:grid; grid-template-columns: 3fr 2fr; gap:20px;">
+        <div class="responsive-grid-2col">
           <!-- Allocations -->
           <div class="dashboard-card">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
@@ -662,7 +662,7 @@ import { exportToCsv, exportToExcel, printTable, exportToPdf, exportHtmlToPdf } 
       <!-- SUPPORT TICKETS TAB -->
       <!-- ======================================================= -->
       <div *ngIf="activeTab === 'tickets'" class="tab-content">
-        <div style="display:grid; grid-template-columns: 2fr 3fr; gap:20px;">
+        <div class="responsive-grid-2col">
           <!-- Tickets List -->
           <div class="dashboard-card">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
@@ -787,7 +787,7 @@ import { exportToCsv, exportToExcel, printTable, exportToPdf, exportHtmlToPdf } 
             <h4 style="margin:0;">System Logs Monitor</h4>
             <input class="form-control" style="width:250px;" [(ngModel)]="logsSearchText" (input)="filterLogsList()" placeholder="Filter logs..." />
           </div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+          <div class="responsive-grid-2col">
             <!-- Audit Logs -->
             <div>
               <h5 style="margin-bottom:12px;">Security Audit Logs ({{ filteredAuditLogs.length }})</h5>
@@ -1300,6 +1300,37 @@ import { exportToCsv, exportToExcel, printTable, exportToPdf, exportHtmlToPdf } 
               <div *ngIf="actionError" class="error-banner">{{ actionError }}</div>
               <button type="submit" class="btn btn-primary w-full">Re-allocate Employee</button>
             </form>
+
+            <!-- Audit Log Detail Modal -->
+            <div *ngIf="activeModal === 'auditDetail'" style="font-size:13px; max-height:70vh; overflow-y:auto;">
+              <div style="margin-bottom:12px;"><strong>User:</strong> {{ selectedAuditLog?.userName }} ({{ selectedAuditLog?.userRole }})</div>
+              <div style="margin-bottom:12px;"><strong>Action:</strong> <span class="badge badge-info">{{ selectedAuditLog?.action }}</span></div>
+              <div style="margin-bottom:12px;"><strong>Component:</strong> {{ selectedAuditLog?.component }}</div>
+              <div style="margin-bottom:12px;"><strong>IP Address:</strong> {{ selectedAuditLog?.ipAddress }}</div>
+              <div style="margin-bottom:12px;"><strong>Date:</strong> {{ selectedAuditLog?.createdAt | date:'medium' }}</div>
+              <div style="margin-top:16px;" *ngIf="selectedAuditLog?.oldValue">
+                <strong>Previous State (Old Value):</strong>
+                <pre style="background:var(--bg-secondary); padding:10px; border-radius:6px; font-size:11px; overflow-x:auto; max-height:150px;">{{ selectedAuditLog.oldValue | json }}</pre>
+              </div>
+              <div style="margin-top:16px;" *ngIf="selectedAuditLog?.newValue">
+                <strong>Updated State (New Value):</strong>
+                <pre style="background:var(--bg-secondary); padding:10px; border-radius:6px; font-size:11px; overflow-x:auto; max-height:150px;">{{ selectedAuditLog.newValue | json }}</pre>
+              </div>
+            </div>
+
+            <!-- Error Log Detail Modal -->
+            <div *ngIf="activeModal === 'errorDetail'" style="font-size:13px; max-height:70vh; overflow-y:auto;">
+              <div style="margin-bottom:12px;"><strong>User / Source:</strong> {{ selectedErrorLog?.user }}</div>
+              <div style="margin-bottom:12px;"><strong>Error Type:</strong> <span class="badge badge-error">{{ selectedErrorLog?.errorType }}</span></div>
+              <div style="margin-bottom:12px;"><strong>Endpoint & Method:</strong> <code>{{ selectedErrorLog?.method }} {{ selectedErrorLog?.endpoint }}</code></div>
+              <div style="margin-bottom:12px;"><strong>HTTP Status Code:</strong> <span class="badge badge-warning">{{ selectedErrorLog?.statusCode }}</span></div>
+              <div style="margin-bottom:12px;"><strong>Error Message:</strong> <div class="text-error" style="background:rgba(239,68,68,0.06); padding:8px 12px; border-radius:6px; margin-top:4px;">{{ selectedErrorLog?.message }}</div></div>
+              <div style="margin-bottom:12px;"><strong>Timestamp:</strong> {{ selectedErrorLog?.createdAt | date:'medium' }}</div>
+              <div style="margin-top:16px;" *ngIf="selectedErrorLog?.stackTrace">
+                <strong>Stack Trace:</strong>
+                <pre style="background:#1e293b; color:#f8fafc; padding:12px; border-radius:6px; font-size:11px; overflow-x:auto; max-height:200px;">{{ selectedErrorLog.stackTrace }}</pre>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1443,6 +1474,8 @@ export class AdminDashboardComponent implements OnInit, OnDestroy, AfterViewInit
   logsSearchText = '';
   filteredAuditLogs: any[] = [];
   filteredErrorLogs: any[] = [];
+  selectedAuditLog: any = null;
+  selectedErrorLog: any = null;
 
   stats: any;
   auditLogs: any[] = [];
@@ -1813,13 +1846,27 @@ export class AdminDashboardComponent implements OnInit, OnDestroy, AfterViewInit
     this.filteredAuditLogs = this.allAuditLogs.filter(log =>
       log.action?.toLowerCase().includes(q) ||
       log.component?.toLowerCase().includes(q) ||
-      log.user?.email?.toLowerCase().includes(q)
+      log.userName?.toLowerCase().includes(q) ||
+      log.userEmail?.toLowerCase().includes(q)
     );
     this.filteredErrorLogs = this.allErrorLogs.filter(log =>
-      log.errorMessage?.toLowerCase().includes(q) ||
+      log.message?.toLowerCase().includes(q) ||
       log.endpoint?.toLowerCase().includes(q) ||
-      log.method?.toLowerCase().includes(q)
+      log.method?.toLowerCase().includes(q) ||
+      log.user?.toLowerCase().includes(q)
     );
+  }
+
+  openAuditDetailModal(audit: any) {
+    this.selectedAuditLog = audit;
+    this.activeModal = 'auditDetail';
+    this.modalTitle = `Audit Record Details: ${audit.action}`;
+  }
+
+  openErrorDetailModal(error: any) {
+    this.selectedErrorLog = error;
+    this.activeModal = 'errorDetail';
+    this.modalTitle = `Exception Log Details: ${error.errorType || 'Error'}`;
   }
 
   ngAfterViewInit() {

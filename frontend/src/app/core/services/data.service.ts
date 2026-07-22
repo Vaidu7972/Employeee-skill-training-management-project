@@ -200,9 +200,7 @@ export class DataService {
     return this.http.put<any>(`${this.baseApi}/ticket/${id}/escalate`, { reason });
   }
 
-  // ----------------------------------------------------
-  // 5. System Statistics & Logs
-  // ----------------------------------------------------
+  // System Dashboard Statistics
   getAdminDashboard(): Observable<any> {
     return this.http.get<any>(`${this.baseApi}/system/dashboard/admin`);
   }
@@ -213,14 +211,6 @@ export class DataService {
 
   getEmployeeDashboard(): Observable<any> {
     return this.http.get<any>(`${this.baseApi}/system/dashboard/employee`);
-  }
-
-  getAuditLogs(query?: any): Observable<any> {
-    return this.http.get<any>(`${this.baseApi}/system/audit-logs`, { params: this.buildParams(query) });
-  }
-
-  getErrorLogs(query?: any): Observable<any> {
-    return this.http.get<any>(`${this.baseApi}/system/error-logs`, { params: this.buildParams(query) });
   }
 
   getNotifications(): Observable<any> {
@@ -411,6 +401,95 @@ export class DataService {
       params: this.buildParams(query),
       responseType: "text" as "json"
     });
+  }
+
+  // ----------------------------------------------------
+  // 11. Generic Admin Reports & Logs
+  // ----------------------------------------------------
+  getGenericReport(type: string, query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/admin/reports/${type}`, { params: this.buildParams(query) });
+  }
+
+  exportGenericReport(type: string, format: string, query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/admin/reports/${type}/export/${format}`, { params: this.buildParams(query) });
+  }
+
+  getAuditLogs(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/admin/audit-logs`, { params: this.buildParams(query) });
+  }
+
+  exportAuditLogs(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/admin/audit-logs/export`, { params: this.buildParams(query), responseType: "text" as "json" });
+  }
+
+  getErrorLogs(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/admin/error-logs`, { params: this.buildParams(query) });
+  }
+
+  exportErrorLogs(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/admin/error-logs/export`, { params: this.buildParams(query), responseType: "text" as "json" });
+  }
+
+  // ----------------------------------------------------
+  // 12. Manager Analytics & Project Module
+  // ----------------------------------------------------
+  getManagerProjectList(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/manager/projects`, { params: this.buildParams(query) });
+  }
+
+  getManagerProjectDetails(id: string): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/manager/projects/${id}`);
+  }
+
+  getManagerProjectEmployees(id: string, query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/manager/projects/${id}/employees`, { params: this.buildParams(query) });
+  }
+
+  getManagerProjectAnalytics(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/manager/projects/analytics`, { params: this.buildParams(query) });
+  }
+
+  getManagerTrainingAnalytics(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/manager/training/analytics`, { params: this.buildParams(query) });
+  }
+
+  getManagerCertificateAnalytics(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/manager/certificates/analytics`, { params: this.buildParams(query) });
+  }
+
+  getManagerTeamResumeAnalytics(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/manager/team-resume/analytics`, { params: this.buildParams(query) });
+  }
+
+  getManagerDevelopmentDashboard(): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/manager/development/dashboard`);
+  }
+
+  // ----------------------------------------------------
+  // 13. Employee Dashboard Analytics
+  // ----------------------------------------------------
+  getEmployeeDashboardAnalytics(): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/employees/dashboard/analytics`);
+  }
+
+  getEmployeeSkillsAnalytics(): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/employees/skills/analytics`);
+  }
+
+  getEmployeeTrainingAnalytics(): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/employees/training/analytics`);
+  }
+
+  getEmployeeCertificatesAnalytics(): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/employees/certificates/analytics`);
+  }
+
+  getEmployeeProjectsAnalytics(): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/employees/projects/analytics`);
+  }
+
+  getEmployeeResumeAnalytics(): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/employees/resume/analytics`);
   }
 }
 

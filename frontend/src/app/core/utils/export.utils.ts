@@ -1,3 +1,10 @@
+export function formatExportFilename(reportTitle: string, filterContext?: string): string {
+  const dateStr = new Date().toISOString().split("T")[0];
+  const cleanTitle = reportTitle.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_");
+  const cleanFilter = filterContext ? "_" + filterContext.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_") : "";
+  return `${cleanTitle}${cleanFilter}_${dateStr}`;
+}
+
 export function exportToCsv(headers: string[], rows: any[][], fileName: string) {
   const csvContent = [
     headers.join(","),

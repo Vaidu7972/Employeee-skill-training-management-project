@@ -368,36 +368,84 @@ export const getEmployeeDashboard = async (req: any, res: Response, next: NextFu
 // ----------------------------------------------------
 
 export const getAuditLogs = async (req: Request, res: Response, next: NextFunction) => {
-  const { page = 1, limit = 20, component } = req.query;
-  const skip = (Number(page) - 1) * Number(limit);
-  const take = Number(limit);
+  const { page = 1, limit = 20, search, action, component, role, user, startDate, endDate } = req.query as any;
+  const pageNum = Math.max(1, Number(page));
+  const limitNum = Math.max(1, Number(limit));
+  const skip = (pageNum - 1) * limitNum;
 
   try {
     const where: any = {};
-    if (component) {
-      where.component = component as string;
+    if (action) where.action = action;
+    if (component) where.component = component;
+    if (role) where.user = { role };
+    if (user) {
+      where.user = {
+        OR: [
+          { email: { contains: user, mode: "insensitive" } },
+          { employee: { firstName: { contains: user, mode: "insensitive" } } },
+          { employee: { lastName: { contains: user, mode: "insensitive" } } },
+        ]
+      };
+    }
+    if (startDate || endDate) {
+      where.createdAt = {
+        gte: startDate ? new Date(startDate) : undefined,
+        lte: endDate ? new Date(endDate) : undefined,
+      };
+    }
+    if (search) {
+      where.OR = [
+        { action: { contains: search, mode: "insensitive" } },
+        { component: { contains: search, mode: "insensitive" } },
+        { ipAddress: { contains: search, mode: "insensitive" } },
+        { user: { email: { contains: search, mode: "insensitive" } } },
+      ];
     }
 
     const [logs, total] = await prisma.$transaction([
       prisma.auditLog.findMany({
         where,
-        include: { user: true },
+        include: {
+          user: {
+            select: {
+              email: true,
+              role: true,
+              employee: { select: { firstName: true, lastName: true, employeeCode: true } }
+            }
+          }
+        },
         skip,
-        take,
+        take: limitNum,
         orderBy: { createdAt: "desc" },
       }),
       prisma.auditLog.count({ where }),
     ]);
 
+    const formattedLogs = logs.map(l => ({
+      id: l.id,
+      userName: l.user?.employee ? `${l.user.employee.firstName} ${l.user.employee.lastName}` : l.user?.email || "SYSTEM",
+      userEmail: l.user?.email || "SYSTEM",
+      userRole: l.user?.role || "SYSTEM",
+      action: l.action,
+      component: l.component,
+      entity: l.component,
+      entityId: l.id,
+      oldValue: l.oldValue,
+      newValue: l.newValue,
+      ipAddress: l.ipAddress || "127.0.0.1",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0)",
+      createdAt: l.createdAt,
+    }));
+
     return res.status(200).json({
       success: true,
       message: "Audit logs retrieved",
-      data: logs,
+      data: formattedLogs,
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        totalPages: Math.ceil(total / Number(limit)),
+        totalPages: Math.ceil(total / limitNum) || 1,
       },
     });
   } catch (err) {
@@ -405,33 +453,136 @@ export const getAuditLogs = async (req: Request, res: Response, next: NextFuncti
   }
 };
 
+export const exportAuditLogs = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    req.query.limit = "10000";
+    const result: any = await new Promise((resolve) => {
+      getAuditLogs(req, {
+        status: () => ({ json: (d: any) => resolve(d) }),
+        json: (d: any) => resolve(d),
+      } as any, next);
+    });
+
+    const logs = result.data || [];
+    const headers = ["ID", "User Name", "User Role", "Action", "Component", "IP Address", "Date and Time"];
+    const csvRows = [headers.join(",")];
+
+    logs.forEach((l: any) => {
+      csvRows.push([
+        `"${l.id}"`, `"${l.userName}"`, `"${l.userRole}"`, `"${l.action}"`,
+        `"${l.component}"`, `"${l.ipAddress}"`, `"${new Date(l.createdAt).toISOString()}"`
+      ].join(","));
+    });
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", 'attachment; filename="audit_logs_report.csv"');
+    return res.status(200).send(csvRows.join("\n"));
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const getErrorLogs = async (req: Request, res: Response, next: NextFunction) => {
-  const { page = 1, limit = 20 } = req.query;
-  const skip = (Number(page) - 1) * Number(limit);
-  const take = Number(limit);
+  const { page = 1, limit = 20, search, errorType, statusCode, user, endpoint, startDate, endDate } = req.query as any;
+  const pageNum = Math.max(1, Number(page));
+  const limitNum = Math.max(1, Number(limit));
+  const skip = (pageNum - 1) * limitNum;
 
   try {
+    const where: any = {};
+    if (errorType) where.errorType = errorType;
+    if (statusCode) where.statusCode = parseInt(statusCode);
+    if (endpoint) where.endpoint = { contains: endpoint, mode: "insensitive" };
+    if (user) {
+      where.user = { email: { contains: user, mode: "insensitive" } };
+    }
+    if (startDate || endDate) {
+      where.createdAt = {
+        gte: startDate ? new Date(startDate) : undefined,
+        lte: endDate ? new Date(endDate) : undefined,
+      };
+    }
+    if (search) {
+      where.OR = [
+        { errorType: { contains: search, mode: "insensitive" } },
+        { errorMessage: { contains: search, mode: "insensitive" } },
+        { endpoint: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
     const [logs, total] = await prisma.$transaction([
       prisma.errorLog.findMany({
-        include: { user: true },
+        where,
+        include: {
+          user: {
+            select: {
+              email: true,
+              employee: { select: { firstName: true, lastName: true } }
+            }
+          }
+        },
         skip,
-        take,
+        take: limitNum,
         orderBy: { createdAt: "desc" },
       }),
-      prisma.errorLog.count(),
+      prisma.errorLog.count({ where }),
     ]);
+
+    const formattedLogs = logs.map(l => ({
+      id: l.id,
+      user: l.user?.employee ? `${l.user.employee.firstName} ${l.user.employee.lastName}` : l.user?.email || "SYSTEM",
+      errorType: l.errorType,
+      message: l.errorMessage,
+      endpoint: l.endpoint,
+      method: l.method,
+      statusCode: l.statusCode,
+      stackTrace: l.stackTrace,
+      requestBody: l.requestBody,
+      ipAddress: l.ipAddress || "127.0.0.1",
+      userAgent: l.userAgent || "Mozilla/5.0",
+      createdAt: l.createdAt,
+    }));
 
     return res.status(200).json({
       success: true,
       message: "Error logs retrieved",
-      data: logs,
+      data: formattedLogs,
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        totalPages: Math.ceil(total / Number(limit)),
+        totalPages: Math.ceil(total / limitNum) || 1,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const exportErrorLogs = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    req.query.limit = "10000";
+    const result: any = await new Promise((resolve) => {
+      getErrorLogs(req, {
+        status: () => ({ json: (d: any) => resolve(d) }),
+        json: (d: any) => resolve(d),
+      } as any, next);
+    });
+
+    const logs = result.data || [];
+    const headers = ["Error ID", "User", "Error Type", "Message", "Endpoint", "Method", "Status Code", "Date"];
+    const csvRows = [headers.join(",")];
+
+    logs.forEach((l: any) => {
+      csvRows.push([
+        `"${l.id}"`, `"${l.user}"`, `"${l.errorType}"`, `"${l.message.replace(/"/g, '""')}"`,
+        `"${l.endpoint}"`, `"${l.method}"`, l.statusCode, `"${new Date(l.createdAt).toISOString()}"`
+      ].join(","));
+    });
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", 'attachment; filename="error_logs_report.csv"');
+    return res.status(200).send(csvRows.join("\n"));
   } catch (err) {
     next(err);
   }

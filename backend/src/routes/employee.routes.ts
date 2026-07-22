@@ -9,12 +9,26 @@ import {
   allocateManagerAPI,
   exportEmployeesCSV,
   importEmployeesCSV,
+  getEmployeeDashboardAnalytics,
+  getEmployeeSkillsAnalytics,
+  getEmployeeTrainingAnalytics,
+  getEmployeeCertificatesAnalytics,
+  getEmployeeProjectsAnalytics,
+  getEmployeeResumeAnalytics,
 } from "../controllers/employee.controller";
 import { authenticateJWT, requireRoles, checkAccessRight } from "../middlewares/auth.middleware";
 import { SystemRole } from "@prisma/client";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+// Employee Dashboard Analytics
+router.get("/dashboard/analytics", authenticateJWT, getEmployeeDashboardAnalytics);
+router.get("/skills/analytics", authenticateJWT, getEmployeeSkillsAnalytics);
+router.get("/training/analytics", authenticateJWT, getEmployeeTrainingAnalytics);
+router.get("/certificates/analytics", authenticateJWT, getEmployeeCertificatesAnalytics);
+router.get("/projects/analytics", authenticateJWT, getEmployeeProjectsAnalytics);
+router.get("/resume/analytics", authenticateJWT, getEmployeeResumeAnalytics);
 
 // Retrieve directory & export data
 router.get("/", authenticateJWT, getEmployees);

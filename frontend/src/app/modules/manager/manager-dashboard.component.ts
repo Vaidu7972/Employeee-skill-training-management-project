@@ -113,6 +113,9 @@ import { filter } from "rxjs/operators";
           <button class="btn btn-sm" [class.btn-primary]="activeSubTab === 'tickets'" (click)="setSubTab('tickets')">
             <span class="material-icons" style="font-size:16px; vertical-align:middle; margin-right:4px;">support_agent</span>Helpdesk ({{ teamTickets.length }})
           </button>
+          <button class="btn btn-sm" [class.btn-primary]="activeSubTab === 'logs'" (click)="setSubTab('logs')">
+            <span class="material-icons" style="font-size:16px; vertical-align:middle; margin-right:4px;">receipt_long</span>Audit & Error Logs
+          </button>
         </div>
 
         <!-- ================================================== -->
@@ -189,6 +192,21 @@ import { filter } from "rxjs/operators";
         <!-- SUB-TAB 2: SKILLS & REVIEWS -->
         <!-- ================================================== -->
         <div *ngIf="activeSubTab === 'skills'" style="display:flex; flex-direction:column; gap:20px;">
+          <!-- Skills & Reviews Graphical Representation -->
+          <div class="charts-grid">
+            <div class="dashboard-card">
+              <h4>Skill Rating Levels Distribution</h4>
+              <div class="chart-container">
+                <canvas id="subtabSkillRatingChart"></canvas>
+              </div>
+            </div>
+            <div class="dashboard-card">
+              <h4>Approved vs Pending Skill Verification</h4>
+              <div class="chart-container">
+                <canvas id="subtabSkillApprovalChart"></canvas>
+              </div>
+            </div>
+          </div>
           <!-- Self Assessments Review queue -->
           <div class="dashboard-card">
             <h4>Pending Team Skill Self-Assessments</h4>
@@ -309,6 +327,21 @@ import { filter } from "rxjs/operators";
         <!-- SUB-TAB 3: TEAM SKILL GAPS (Employee Skill Gap Overview) -->
         <!-- ================================================== -->
         <div *ngIf="activeSubTab === 'gaps'" class="dashboard-card">
+          <!-- Skill Gaps Graphical Representation -->
+          <div class="charts-grid" style="margin-bottom: 20px;">
+            <div class="dashboard-card" style="box-shadow:none; border:1px solid var(--border);">
+              <h4>Skill Gap Priority Breakdown</h4>
+              <div class="chart-container">
+                <canvas id="subtabGapSeverityChart"></canvas>
+              </div>
+            </div>
+            <div class="dashboard-card" style="box-shadow:none; border:1px solid var(--border);">
+              <h4>Required Level vs Verified Rating Gap</h4>
+              <div class="chart-container">
+                <canvas id="subtabGapRatingChart"></canvas>
+              </div>
+            </div>
+          </div>
           <div class="card-header border-b">
             <h4>Employee Skill Gap Overview</h4>
             <div class="export-actions">
@@ -495,7 +528,23 @@ import { filter } from "rxjs/operators";
         <!-- ================================================== -->
         <!-- SUB-TAB 4: TEAM TRAINING TRACKER -->
         <!-- ================================================== -->
-        <div *ngIf="activeSubTab === 'training'" class="dashboard-card">
+        <div *ngIf="activeSubTab === 'training'" style="display:flex; flex-direction:column; gap:20px;">
+          <!-- Team Training Graphical Representation -->
+          <div class="charts-grid">
+            <div class="dashboard-card">
+              <h4>Team Training Status Distribution</h4>
+              <div class="chart-container">
+                <canvas id="subtabTrainingStatusChart"></canvas>
+              </div>
+            </div>
+            <div class="dashboard-card">
+              <h4>Category Progress Breakdown (%)</h4>
+              <div class="chart-container">
+                <canvas id="subtabTrainingProgressChart"></canvas>
+              </div>
+            </div>
+          </div>
+          <div class="dashboard-card">
           <div class="card-header border-b">
             <h4>Team Training Allocations & Progress</h4>
             <div class="export-actions">
@@ -574,11 +623,27 @@ import { filter } from "rxjs/operators";
             </div>
           </div>
         </div>
+      </div>
 
         <!-- ================================================== -->
         <!-- SUB-TAB 5: CERTIFICATES -->
         <!-- ================================================== -->
         <div *ngIf="activeSubTab === 'certificates'" style="display:flex; flex-direction:column; gap:20px;">
+          <!-- Team Certificates Graphical Representation -->
+          <div class="charts-grid">
+            <div class="dashboard-card">
+              <h4>Certificate Verification Status</h4>
+              <div class="chart-container">
+                <canvas id="subtabCertStatusChart"></canvas>
+              </div>
+            </div>
+            <div class="dashboard-card">
+              <h4>Issuing Organizations Breakdown</h4>
+              <div class="chart-container">
+                <canvas id="subtabCertOrgChart"></canvas>
+              </div>
+            </div>
+          </div>
           <!-- Pending Certifications Approvals Queue -->
           <div class="dashboard-card">
             <h4>Pending Certificate Upload Verifications</h4>
@@ -686,11 +751,28 @@ import { filter } from "rxjs/operators";
             </div>
           </div>
         </div>
+      </div>
 
         <!-- ================================================== -->
         <!-- SUB-TAB 6: PROJECTS -->
         <!-- ================================================== -->
-        <div *ngIf="activeSubTab === 'projects'" class="dashboard-card">
+        <div *ngIf="activeSubTab === 'projects'" style="display:flex; flex-direction:column; gap:20px;">
+          <!-- Team Projects Graphical Representation -->
+          <div class="charts-grid">
+            <div class="dashboard-card">
+              <h4>Projects Status Breakdown</h4>
+              <div class="chart-container">
+                <canvas id="projStatusChart"></canvas>
+              </div>
+            </div>
+            <div class="dashboard-card">
+              <h4>Project Completion Progress (%)</h4>
+              <div class="chart-container">
+                <canvas id="projCompletionChart"></canvas>
+              </div>
+            </div>
+          </div>
+          <div class="dashboard-card">
           <div class="card-header border-b">
             <h4>Team Project Assignments</h4>
             <div class="export-actions">
@@ -759,11 +841,27 @@ import { filter } from "rxjs/operators";
             </div>
           </div>
         </div>
+      </div>
 
         <!-- ================================================== -->
         <!-- SUB-TAB 6.5: TEAM RESUMES -->
         <!-- ================================================== -->
         <div *ngIf="activeSubTab === 'resumes'" style="display:flex; flex-direction:column; gap:20px;">
+          <!-- Team Resumes Graphical Representation -->
+          <div class="charts-grid">
+            <div class="dashboard-card">
+              <h4>Team Experience Level Distribution</h4>
+              <div class="chart-container">
+                <canvas id="resumeExpChart"></canvas>
+              </div>
+            </div>
+            <div class="dashboard-card">
+              <h4>Top Competencies Highlighted on Team Resumes</h4>
+              <div class="chart-container">
+                <canvas id="resumeSkillsChart"></canvas>
+              </div>
+            </div>
+          </div>
           
           <!-- Team Resume Stats Overview -->
           <div class="dashboard-card" id="teamResumeSummary" style="padding: 24px; position: relative;">
@@ -1353,6 +1451,70 @@ import { filter } from "rxjs/operators";
                 </tr>
               </tbody>
             </table>
+        <!-- ================================================== -->
+        <!-- SUB-TAB 8: AUDIT & ERROR LOGS -->
+        <!-- ================================================== -->
+        <div *ngIf="activeSubTab === 'logs'" class="dashboard-card" style="margin-top: 24px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+            <h4 style="margin:0;">Team Audit & Exception Monitor</h4>
+            <input class="form-control" style="width:250px;" [(ngModel)]="managerLogsSearchText" (input)="filterManagerLogs()" placeholder="Filter logs..." />
+          </div>
+          <div class="responsive-grid-2col">
+            <!-- Audit Logs -->
+            <div>
+              <h5 style="margin-bottom:12px;">Audit Log Entries</h5>
+              <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Action</th>
+                      <th>Component</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let a of filteredManagerAuditLogs">
+                      <td>{{ a.userName || a.userEmail }}</td>
+                      <td><span class="badge badge-info">{{ a.action }}</span></td>
+                      <td>{{ a.component }}</td>
+                      <td>{{ a.createdAt | date:'short' }}</td>
+                    </tr>
+                    <tr *ngIf="filteredManagerAuditLogs.length === 0">
+                      <td colspan="4" class="text-center text-muted">No audit log records found.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Error Logs -->
+            <div>
+              <h5 style="margin-bottom:12px;">Runtime Error Log Entries</h5>
+              <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Endpoint</th>
+                      <th>Method</th>
+                      <th>Error Message</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let err of filteredManagerErrorLogs">
+                      <td><code>{{ err.endpoint }}</code></td>
+                      <td><strong>{{ err.method }}</strong></td>
+                      <td class="text-error" style="max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" [title]="err.message">{{ err.message }}</td>
+                      <td>{{ err.createdAt | date:'short' }}</td>
+                    </tr>
+                    <tr *ngIf="filteredManagerErrorLogs.length === 0">
+                      <td colspan="4" class="text-center text-muted">No error log records found.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1440,10 +1602,17 @@ import { filter } from "rxjs/operators";
   `],
 })
 export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestroy {
-  activeMasterTab: "team" | "development" = "team";
-  activeSubTab: 'profiles' | 'skills' | 'gaps' | 'training' | 'certificates' | 'projects' | 'tickets' | 'resumes' = 'profiles';
+  activeMasterTab: string = "team";
+  activeSubTab: string = "profiles";
   currentUser: any;
   stats: any;
+
+  // Audit & Error Logs
+  managerAuditLogs: any[] = [];
+  managerErrorLogs: any[] = [];
+  filteredManagerAuditLogs: any[] = [];
+  filteredManagerErrorLogs: any[] = [];
+  managerLogsSearchText = '';
 
   // Tab 1 (My Team) Lists
   teamMembers: any[] = [];
@@ -1574,6 +1743,18 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
   // Charts
   gapChart: any;
   progressChart: any;
+  resumeExpChart: any;
+  resumeSkillsChart: any;
+  projStatusChart: any;
+  projCompletionChart: any;
+  subtabTrainingStatusChart: any;
+  subtabTrainingProgressChart: any;
+  subtabCertStatusChart: any;
+  subtabCertOrgChart: any;
+  subtabSkillRatingChart: any;
+  subtabSkillApprovalChart: any;
+  subtabGapSeverityChart: any;
+  subtabGapRatingChart: any;
 
   private routeSub!: Subscription;
 
@@ -1588,6 +1769,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
     this.currentUser = this.authService.currentUserValue;
     this.loadStats();
     this.loadTeamData();
+    this.loadManagerLogs();
     this.initializeForms();
     this.loadFormContexts();
 
@@ -1622,12 +1804,26 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
       if (this.activeSubTab === "resumes") {
         this.loadTeamSummary();
       }
+      setTimeout(() => {
+        this.renderSubTabCharts();
+      }, 200);
     }
+  }
+
+  setSubTab(tab: any) {
+    this.activeSubTab = tab;
+    if (tab === "resumes") {
+      this.loadTeamSummary();
+    }
+    setTimeout(() => {
+      this.renderSubTabCharts();
+    }, 200);
   }
 
   ngAfterViewInit() {
     setTimeout(() => {
       this.renderTeamCharts();
+      this.renderSubTabCharts();
     }, 1200);
   }
 
@@ -1819,24 +2015,6 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
   setPage(page: number) {
     this.currentPage = page;
     this.calculatePagination();
-  }
-
-  setSubTab(tab: any) {
-    this.activeSubTab = tab;
-    const tabRouteMap: Record<string, string> = {
-      profiles: "/manager/team",
-      skills: "/manager/reviews",
-      training: "/manager/training",
-      projects: "/manager/projects",
-      resumes: "/manager/resumes"
-    };
-    if (tab === 'resumes') {
-      this.loadTeamSummary();
-    }
-    const route = tabRouteMap[tab];
-    if (route) {
-      this.router.navigate([route]);
-    }
   }
 
   // ----------------------------------------------------
@@ -2172,6 +2350,43 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
   setCertsPage(page: number) {
     this.certsPage = page;
     this.calculateCertsPagination();
+  }
+
+  loadManagerLogs() {
+    this.dataService.getAuditLogs({ limit: 50 }).subscribe({
+      next: (res) => {
+        this.managerAuditLogs = res.data || [];
+        this.filterManagerLogs();
+      },
+      error: () => {}
+    });
+    this.dataService.getErrorLogs({ limit: 50 }).subscribe({
+      next: (res) => {
+        this.managerErrorLogs = res.data || [];
+        this.filterManagerLogs();
+      },
+      error: () => {}
+    });
+  }
+
+  filterManagerLogs() {
+    if (!this.managerLogsSearchText.trim()) {
+      this.filteredManagerAuditLogs = [...this.managerAuditLogs];
+      this.filteredManagerErrorLogs = [...this.managerErrorLogs];
+      return;
+    }
+    const q = this.managerLogsSearchText.toLowerCase();
+    this.filteredManagerAuditLogs = this.managerAuditLogs.filter(a =>
+      a.action?.toLowerCase().includes(q) ||
+      a.component?.toLowerCase().includes(q) ||
+      a.userName?.toLowerCase().includes(q) ||
+      a.userEmail?.toLowerCase().includes(q)
+    );
+    this.filteredManagerErrorLogs = this.managerErrorLogs.filter(err =>
+      err.message?.toLowerCase().includes(q) ||
+      err.endpoint?.toLowerCase().includes(q) ||
+      err.method?.toLowerCase().includes(q)
+    );
   }
 
   exportCerts(type: string) {
@@ -2609,6 +2824,179 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
           plugins: { legend: { position: "right" } },
         },
       });
+    }
+  }
+
+  renderSubTabCharts() {
+    if (this.activeSubTab === 'resumes') {
+      const ctxExp = document.getElementById("resumeExpChart") as HTMLCanvasElement;
+      if (ctxExp) {
+        if (this.resumeExpChart) this.resumeExpChart.destroy();
+        this.resumeExpChart = new Chart(ctxExp, {
+          type: "bar",
+          data: {
+            labels: ["1-2 Yrs", "3-5 Yrs", "6-8 Yrs", "9+ Yrs"],
+            datasets: [{ label: "Team Members", data: [3, 8, 5, 2], backgroundColor: "#5e72e4", borderRadius: 4 }]
+          },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
+      }
+
+      const ctxSk = document.getElementById("resumeSkillsChart") as HTMLCanvasElement;
+      if (ctxSk) {
+        if (this.resumeSkillsChart) this.resumeSkillsChart.destroy();
+        this.resumeSkillsChart = new Chart(ctxSk, {
+          type: "bar",
+          data: {
+            labels: ["TypeScript", "Angular", "Node.js", "PostgreSQL", "Docker", "Python"],
+            datasets: [{ label: "Proficient Members", data: [12, 10, 8, 7, 5, 4], backgroundColor: "#2dce89", borderRadius: 4 }]
+          },
+          options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false }
+        });
+      }
+    }
+
+    else if (this.activeSubTab === 'projects') {
+      const ctxStat = document.getElementById("projStatusChart") as HTMLCanvasElement;
+      if (ctxStat) {
+        if (this.projStatusChart) this.projStatusChart.destroy();
+        this.projStatusChart = new Chart(ctxStat, {
+          type: "doughnut",
+          data: {
+            labels: ["Active", "Planning", "On Hold", "Completed"],
+            datasets: [{ data: [8, 4, 2, 6], backgroundColor: ["#2dce89", "#5e72e4", "#fb6340", "#11cdef"] }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "right" } } }
+        });
+      }
+
+      const ctxComp = document.getElementById("projCompletionChart") as HTMLCanvasElement;
+      if (ctxComp) {
+        if (this.projCompletionChart) this.projCompletionChart.destroy();
+        this.projCompletionChart = new Chart(ctxComp, {
+          type: "bar",
+          data: {
+            labels: ["SkillSphere", "HR Analytics", "Cloud Migration", "Mobile Gateway"],
+            datasets: [{ label: "Completion (%)", data: [85, 45, 90, 60], backgroundColor: "#11cdef", borderRadius: 4 }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, scales: { y: { max: 100 } } }
+        });
+      }
+    }
+
+    else if (this.activeSubTab === 'training') {
+      const ctxTrStat = document.getElementById("subtabTrainingStatusChart") as HTMLCanvasElement;
+      if (ctxTrStat) {
+        if (this.subtabTrainingStatusChart) this.subtabTrainingStatusChart.destroy();
+        this.subtabTrainingStatusChart = new Chart(ctxTrStat, {
+          type: "doughnut",
+          data: {
+            labels: ["Verified", "Completed", "In Progress", "Assigned", "Overdue"],
+            datasets: [{ data: [15, 10, 18, 5, 2], backgroundColor: ["#2dce89", "#49b8a8", "#5e72e4", "#e8a83e", "#f5365c"] }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "right" } } }
+        });
+      }
+
+      const ctxTrProg = document.getElementById("subtabTrainingProgressChart") as HTMLCanvasElement;
+      if (ctxTrProg) {
+        if (this.subtabTrainingProgressChart) this.subtabTrainingProgressChart.destroy();
+        this.subtabTrainingProgressChart = new Chart(ctxTrProg, {
+          type: "bar",
+          data: {
+            labels: ["Technical", "Domain", "Leadership", "Compliance"],
+            datasets: [{ label: "Avg Progress (%)", data: [88, 72, 65, 96], backgroundColor: "#5e72e4", borderRadius: 4 }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, scales: { y: { max: 100 } } }
+        });
+      }
+    }
+
+    else if (this.activeSubTab === 'certificates') {
+      const ctxCertStat = document.getElementById("subtabCertStatusChart") as HTMLCanvasElement;
+      if (ctxCertStat) {
+        if (this.subtabCertStatusChart) this.subtabCertStatusChart.destroy();
+        this.subtabCertStatusChart = new Chart(ctxCertStat, {
+          type: "pie",
+          data: {
+            labels: ["Verified", "Pending Verification", "Rejected"],
+            datasets: [{ data: [22, 5, 2], backgroundColor: ["#2dce89", "#fb6340", "#f5365c"] }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "right" } } }
+        });
+      }
+
+      const ctxCertOrg = document.getElementById("subtabCertOrgChart") as HTMLCanvasElement;
+      if (ctxCertOrg) {
+        if (this.subtabCertOrgChart) this.subtabCertOrgChart.destroy();
+        this.subtabCertOrgChart = new Chart(ctxCertOrg, {
+          type: "bar",
+          data: {
+            labels: ["AWS", "Microsoft", "Google Cloud", "Scrum Alliance", "Oracle"],
+            datasets: [{ label: "Certificates Uploaded", data: [10, 8, 5, 4, 2], backgroundColor: "#5e72e4", borderRadius: 4 }]
+          },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
+      }
+    }
+
+    else if (this.activeSubTab === 'skills') {
+      const ctxSkLvl = document.getElementById("subtabSkillRatingChart") as HTMLCanvasElement;
+      if (ctxSkLvl) {
+        if (this.subtabSkillRatingChart) this.subtabSkillRatingChart.destroy();
+        this.subtabSkillRatingChart = new Chart(ctxSkLvl, {
+          type: "bar",
+          data: {
+            labels: ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5"],
+            datasets: [{ label: "Skill Assignments", data: [3, 7, 15, 10, 4], backgroundColor: "#5e72e4", borderRadius: 4 }]
+          },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
+      }
+
+      const ctxSkApp = document.getElementById("subtabSkillApprovalChart") as HTMLCanvasElement;
+      if (ctxSkApp) {
+        if (this.subtabSkillApprovalChart) this.subtabSkillApprovalChart.destroy();
+        this.subtabSkillApprovalChart = new Chart(ctxSkApp, {
+          type: "doughnut",
+          data: {
+            labels: ["Approved", "Submitted / Pending", "Assigned", "Rejected"],
+            datasets: [{ data: [25, 8, 4, 2], backgroundColor: ["#2dce89", "#fb6340", "#5e72e4", "#f5365c"] }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "right" } } }
+        });
+      }
+    }
+
+    else if (this.activeSubTab === 'gaps') {
+      const ctxGapSev = document.getElementById("subtabGapSeverityChart") as HTMLCanvasElement;
+      if (ctxGapSev) {
+        if (this.subtabGapSeverityChart) this.subtabGapSeverityChart.destroy();
+        this.subtabGapSeverityChart = new Chart(ctxGapSev, {
+          type: "pie",
+          data: {
+            labels: ["No Gap", "Low Priority Gap", "Medium Priority Gap", "High Priority Gap"],
+            datasets: [{ data: [18, 7, 4, 2], backgroundColor: ["#2dce89", "#11cdef", "#fb6340", "#f5365c"] }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "right" } } }
+        });
+      }
+
+      const ctxGapRat = document.getElementById("subtabGapRatingChart") as HTMLCanvasElement;
+      if (ctxGapRat) {
+        if (this.subtabGapRatingChart) this.subtabGapRatingChart.destroy();
+        this.subtabGapRatingChart = new Chart(ctxGapRat, {
+          type: "bar",
+          data: {
+            labels: ["JS / TS", "Python API", "React SPA", "Docker", "SQL Queries"],
+            datasets: [
+              { label: "Required Level", data: [4.0, 4.0, 4.0, 3.0, 3.5], backgroundColor: "rgba(94,114,228,0.2)", borderColor: "#5e72e4", borderWidth: 1 },
+              { label: "Verified Rating", data: [3.8, 2.5, 3.2, 2.0, 3.0], backgroundColor: "#5e72e4", borderRadius: 4 }
+            ]
+          },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
+      }
     }
   }
 }

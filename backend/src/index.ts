@@ -18,6 +18,7 @@ import projectRoutes from "./routes/project.routes";
 import resumeRoutes from "./routes/resume.routes";
 import reportRoutes from "./routes/report.routes";
 import managerRoutes from "./routes/manager.routes";
+import adminRoutes from "./routes/admin.routes";
 
 import { globalErrorHandler } from "./middlewares/error.middleware";
 import { initSlaScheduler } from "./jobs/sla.job";
@@ -121,6 +122,7 @@ app.use("/api/projects", projectRoutes);
 app.use("/api/resume", resumeRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/manager", managerRoutes);
+app.use("/api/admin", adminRoutes);
 
 // Root Ping Route
 app.get("/ping", (req, res) => {

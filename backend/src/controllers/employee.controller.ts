@@ -778,3 +778,208 @@ export const importEmployeesCSV = async (req: any, res: Response, next: NextFunc
     next(err);
   }
 };
+
+// ----------------------------------------------------
+// Employee Dashboard & Tab Analytics Endpoints
+// ----------------------------------------------------
+
+export const getEmployeeDashboardAnalytics = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const employeeId = req.user.employeeId;
+    if (!employeeId) return res.status(400).json({ success: false, message: "Employee profile not linked." });
+
+    const emp = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: {
+        employeeSkills: { include: { skill: { include: { category: true } } } },
+        trainingPlans: true,
+        certificates: true,
+        projectAssignments: true,
+      }
+    });
+
+    if (!emp) return res.status(404).json({ success: false, message: "Employee not found." });
+
+    // 1. Skill Proficiency Distribution
+    const ratingDist: Record<string, number> = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 };
+    const skillCategoryDist: Record<string, number> = {};
+    emp.employeeSkills.forEach(es => {
+      ratingDist[String(es.finalRating || es.selfRating)] = (ratingDist[String(es.finalRating || es.selfRating)] || 0) + 1;
+      const cat = es.skill.category.name;
+      skillCategoryDist[cat] = (skillCategoryDist[cat] || 0) + 1;
+    });
+
+    // 2. Training Progress & Status
+    const trainingStatusDist: Record<string, number> = {};
+    let completedTrainings = 0;
+    emp.trainingPlans.forEach(tp => {
+      trainingStatusDist[tp.status] = (trainingStatusDist[tp.status] || 0) + 1;
+      if (tp.status === "COMPLETED" || tp.status === "VERIFIED") completedTrainings++;
+    });
+
+    // 3. Certificate Status
+    const certStatusDist: Record<string, number> = {};
+    emp.certificates.forEach(c => {
+      certStatusDist[c.verificationStatus] = (certStatusDist[c.verificationStatus] || 0) + 1;
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        skillProficiency: ratingDist,
+        skillsByCategory: skillCategoryDist,
+        trainingStatus: trainingStatusDist,
+        completedTrainings,
+        totalTrainings: emp.trainingPlans.length,
+        certificateStatus: certStatusDist,
+        totalCertificates: emp.certificates.length,
+        projectsCount: emp.projectAssignments.length,
+        profileCompletion: emp.profileCompletion,
+        careerReadiness: Math.min(100, (emp.profileCompletion + (completedTrainings * 10))),
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getEmployeeSkillsAnalytics = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const employeeId = req.user.employeeId;
+    const empSkills = await prisma.employeeSkill.findMany({
+      where: { employeeId },
+      include: { skill: { include: { category: true } } }
+    });
+
+    const categoryCounts: Record<string, number> = {};
+    const skillGapStarChart = empSkills.map(es => ({
+      skill: es.skill.skillName,
+      current: es.finalRating || es.selfRating,
+      required: es.skill.defaultRequiredLevel || 3,
+      gap: Math.max(0, (es.skill.defaultRequiredLevel || 3) - (es.finalRating || es.selfRating)),
+    }));
+
+    empSkills.forEach(es => {
+      const cat = es.skill.category.name;
+      categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        skillsByCategory: categoryCounts,
+        skillGapAnalysis: skillGapStarChart,
+        totalSkills: empSkills.length,
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getEmployeeTrainingAnalytics = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const employeeId = req.user.employeeId;
+    const plans = await prisma.trainingPlan.findMany({
+      where: { employeeId },
+      include: { skill: true }
+    });
+
+    const statusDist: Record<string, number> = {};
+    plans.forEach(p => statusDist[p.status] = (statusDist[p.status] || 0) + 1);
+
+    return res.json({
+      success: true,
+      data: {
+        statusDistribution: statusDist,
+        totalTrainings: plans.length,
+        completedCount: (statusDist["COMPLETED"] || 0) + (statusDist["VERIFIED"] || 0),
+        inProgressCount: statusDist["IN_PROGRESS"] || 0,
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getEmployeeCertificatesAnalytics = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const employeeId = req.user.employeeId;
+    const certs = await prisma.certificate.findMany({ where: { employeeId } });
+
+    const statusDist: Record<string, number> = {};
+    certs.forEach(c => statusDist[c.verificationStatus] = (statusDist[c.verificationStatus] || 0) + 1);
+
+    return res.json({
+      success: true,
+      data: {
+        statusDistribution: statusDist,
+        totalCertificates: certs.length,
+        verifiedCount: statusDist["VERIFIED"] || 0,
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getEmployeeProjectsAnalytics = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const employeeId = req.user.employeeId;
+    const assignments = await prisma.projectAssignment.findMany({
+      where: { employeeId },
+      include: { project: true }
+    });
+
+    const statusDist: Record<string, number> = {};
+    assignments.forEach(a => statusDist[a.project.status] = (statusDist[a.project.status] || 0) + 1);
+
+    return res.json({
+      success: true,
+      data: {
+        statusDistribution: statusDist,
+        totalProjects: assignments.length,
+        projects: assignments.map(a => ({
+          name: a.project.name,
+          role: a.role,
+          contribution: a.contributionPercent,
+          status: a.project.status,
+          completion: a.project.completionPercent,
+        }))
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getEmployeeResumeAnalytics = async (req: any, res: Response, next: NextFunction) => {
+  try {
+    const employeeId = req.user.employeeId;
+    const emp = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: {
+        employeeSkills: true,
+        projectAssignments: true,
+        certificates: true,
+        trainingPlans: true,
+      }
+    });
+
+    if (!emp) return res.status(404).json({ success: false, message: "Employee not found." });
+
+    return res.json({
+      success: true,
+      data: {
+        completeness: emp.profileCompletion,
+        skillsCount: emp.employeeSkills.length,
+        projectsCount: emp.projectAssignments.length,
+        certificatesCount: emp.certificates.length,
+        trainingCount: emp.trainingPlans.length,
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

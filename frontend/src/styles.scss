@@ -326,11 +326,15 @@ body {
 .main-panel {
   flex: 1;
   margin-left: var(--sidebar-w);
+  width: calc(100% - var(--sidebar-w));
+  max-width: calc(100% - var(--sidebar-w));
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
   background-color: var(--bg-main);
   transition: background-color 0.3s ease;
+  overflow-x: hidden;
 }
 
 /* Top Navigation Bar */
@@ -363,7 +367,11 @@ body {
     color: var(--text-muted);
     margin-top: 2px;
 
-    span { color: var(--text-muted); }
+    a {
+      color: var(--primary);
+      text-decoration: none;
+      &:hover { text-decoration: underline; }
+    }
     .crumb-active { color: var(--primary); font-weight: 500; }
   }
 
@@ -376,7 +384,7 @@ body {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .nav-btn {
@@ -427,12 +435,31 @@ body {
   50%       { box-shadow: 0 0 0 5px rgba(239,68,68,0); }
 }
 
-/* Content Viewport */
+/* Content Viewport & Dashboard Layout Wrappers */
 .content-viewport {
   flex: 1;
   padding: 24px 28px;
   overflow-y: auto;
+  overflow-x: hidden;
+  max-width: 100%;
+  box-sizing: border-box;
   animation: fadeInUp 0.3s ease;
+}
+
+.dashboard-wrapper {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  animation: fadeInUp 0.28s ease;
+}
+
+.responsive-grid-2col {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 20px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 @keyframes fadeInUp {
@@ -703,17 +730,20 @@ body {
 .table-responsive {
   width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   border-radius: var(--radius-sm);
+  margin-bottom: 12px;
 
   &::-webkit-scrollbar {
-    height: 5px;
+    height: 6px;
   }
   &::-webkit-scrollbar-track { background: var(--bg-secondary); }
-  &::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  &::-webkit-scrollbar-thumb { background: var(--primary-glow); border-radius: 4px; }
 }
 
 .table {
   width: 100%;
+  min-width: 800px;
   border-collapse: collapse;
   font-size: 13.5px;
 
@@ -727,6 +757,9 @@ body {
     letter-spacing: 0.5px;
     background: var(--bg-secondary);
     white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 5;
   }
 
   td {
