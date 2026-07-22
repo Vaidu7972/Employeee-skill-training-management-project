@@ -53,9 +53,11 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       });
     }
 
+    const cleanEmail = email.toLowerCase().trim();
+
     // Find user
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: cleanEmail },
       include: { employee: true },
     });
 
@@ -118,7 +120,8 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     // Validate Portal vs Role
     // Portal options: "ADMIN_PORTAL", "MANAGER_PORTAL", "EMPLOYEE_PORTAL"
     let isPortalAuthorized = false;
-    if (portal === "ADMIN_PORTAL" && user.role === SystemRole.ADMIN) {
+    if (user.role === SystemRole.ADMIN) {
+      // System Admin has access to all portals
       isPortalAuthorized = true;
     } else if (portal === "MANAGER_PORTAL" && user.role === SystemRole.MANAGER) {
       isPortalAuthorized = true;

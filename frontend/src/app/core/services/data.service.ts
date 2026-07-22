@@ -394,5 +394,23 @@ export class DataService {
   globalSearch(q: string): Observable<any> {
     return this.http.get<any>(`${this.baseApi}/reports/search`, { params: this.buildParams({ q }) });
   }
+
+  // ----------------------------------------------------
+  // 10. Manager Skill Gap APIs
+  // ----------------------------------------------------
+  getManagerTeamSkillGaps(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/manager/team/skill-gaps`, { params: this.buildParams(query) });
+  }
+
+  getManagerSkillGapSummary(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/manager/team/skill-gaps/summary`, { params: this.buildParams(query) });
+  }
+
+  exportManagerTeamSkillGaps(query?: any): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/manager/team/skill-gaps/export`, {
+      params: this.buildParams(query),
+      responseType: "text" as "json"
+    });
+  }
 }
 

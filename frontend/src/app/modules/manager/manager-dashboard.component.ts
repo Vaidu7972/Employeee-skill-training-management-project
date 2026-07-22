@@ -305,78 +305,189 @@ import { filter } from "rxjs/operators";
         <!-- ================================================== -->
         <!-- SUB-TAB 3: TEAM SKILL GAPS -->
         <!-- ================================================== -->
+        <!-- ================================================== -->
+        <!-- SUB-TAB 3: TEAM SKILL GAPS (Employee Skill Gap Overview) -->
+        <!-- ================================================== -->
         <div *ngIf="activeSubTab === 'gaps'" class="dashboard-card">
           <div class="card-header border-b">
-            <h4>Team Skill Gaps Analysis</h4>
+            <h4>Employee Skill Gap Overview</h4>
             <div class="export-actions">
-              <button class="btn btn-outline-sm" (click)="exportGaps('csv')">CSV</button>
-              <button class="btn btn-outline-sm" (click)="exportGaps('excel')">Excel</button>
-              <button class="btn btn-outline-sm" (click)="exportGaps('pdf')">PDF</button>
-              <button class="btn btn-outline-sm" (click)="exportGaps('print')">Print</button>
+              <button class="btn btn-outline-sm" (click)="exportGapsCSV()">Export CSV</button>
+              <button class="btn btn-outline-sm" (click)="loadManagerSkillGaps()">Refresh</button>
             </div>
           </div>
 
-          <div class="filters-row">
-            <input type="text" class="form-control filter-input" [(ngModel)]="gapsSearch" (input)="filterTeamGaps()" placeholder="Search employee or skill..." />
-            <select class="form-control filter-select" [(ngModel)]="gapsPageSize" (change)="resetGapsPagination()">
+          <!-- Summary KPI Cards -->
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin:16px 0 20px;">
+            <div style="padding:14px; background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.2); border-radius:10px; text-align:center;">
+              <div style="font-size:22px; font-weight:800; color:var(--success);">{{ gapsSummary?.noGapCount || 0 }}</div>
+              <div style="font-size:11px; color:var(--text-muted); font-weight:600; margin-top:2px;">No Skill Gap</div>
+            </div>
+            <div style="padding:14px; background:rgba(59,130,246,0.06); border:1px solid rgba(59,130,246,0.2); border-radius:10px; text-align:center;">
+              <div style="font-size:22px; font-weight:800; color:var(--info);">{{ gapsSummary?.lowGapCount || 0 }}</div>
+              <div style="font-size:11px; color:var(--text-muted); font-weight:600; margin-top:2px;">Low Skill Gap</div>
+            </div>
+            <div style="padding:14px; background:rgba(245,158,11,0.06); border:1px solid rgba(245,158,11,0.2); border-radius:10px; text-align:center;">
+              <div style="font-size:22px; font-weight:800; color:var(--warning);">{{ gapsSummary?.mediumGapCount || 0 }}</div>
+              <div style="font-size:11px; color:var(--text-muted); font-weight:600; margin-top:2px;">Medium Skill Gap</div>
+            </div>
+            <div style="padding:14px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.2); border-radius:10px; text-align:center;">
+              <div style="font-size:22px; font-weight:800; color:var(--error);">{{ gapsSummary?.highGapCount || 0 }}</div>
+              <div style="font-size:11px; color:var(--text-muted); font-weight:600; margin-top:2px;">High Skill Gap</div>
+            </div>
+            <div style="padding:14px; background:var(--surface-hover); border:1px solid var(--border); border-radius:10px; text-align:center;">
+              <div style="font-size:22px; font-weight:800; color:var(--primary);">{{ gapsSummary?.avgTeamSkillRating || 0 }} / 5</div>
+              <div style="font-size:11px; color:var(--text-muted); font-weight:600; margin-top:2px;">Avg Team Rating</div>
+            </div>
+            <div style="padding:14px; background:var(--surface-hover); border:1px solid var(--border); border-radius:10px; text-align:center;">
+              <div style="font-size:22px; font-weight:800; color:var(--secondary);">{{ gapsSummary?.avgTeamSkillGap || 0 }}</div>
+              <div style="font-size:11px; color:var(--text-muted); font-weight:600; margin-top:2px;">Avg Team Gap</div>
+            </div>
+          </div>
+
+          <!-- Filters Row -->
+          <div class="filters-row" style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
+            <input type="text" class="form-control filter-input" style="flex:1; min-width:160px;" [(ngModel)]="gapsSearch" (input)="gapsPage = 1; loadManagerSkillGaps()" placeholder="Search employee, code, skill..." />
+            <select class="form-control filter-select" style="width:140px;" [(ngModel)]="gapsDeptFilter" (change)="gapsPage = 1; loadManagerSkillGaps()">
+              <option value="">All Departments</option>
+              <option *ngFor="let d of departmentsList" [value]="d.id">{{ d.name }}</option>
+            </select>
+            <select class="form-control filter-select" style="width:140px;" [(ngModel)]="gapsSkillFilter" (change)="gapsPage = 1; loadManagerSkillGaps()">
+              <option value="">All Skills</option>
+              <option *ngFor="let sk of skillsList" [value]="sk.id">{{ sk.skillName }}</option>
+            </select>
+            <select class="form-control filter-select" style="width:130px;" [(ngModel)]="gapsPriorityFilter" (change)="gapsPage = 1; loadManagerSkillGaps()">
+              <option value="">All Priorities</option>
+              <option value="NONE">No Gap</option>
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+            </select>
+            <select class="form-control filter-select" style="width:130px;" [(ngModel)]="gapsCurrentRatingFilter" (change)="gapsPage = 1; loadManagerSkillGaps()">
+              <option value="">Current Rating</option>
+              <option *ngFor="let r of [1,2,3,4,5]" [value]="r">Level {{ r }}</option>
+            </select>
+            <select class="form-control filter-select" style="width:130px;" [(ngModel)]="gapsRequiredRatingFilter" (change)="gapsPage = 1; loadManagerSkillGaps()">
+              <option value="">Required Rating</option>
+              <option *ngFor="let r of [1,2,3,4,5]" [value]="r">Level {{ r }}</option>
+            </select>
+            <select class="form-control filter-select" style="width:140px;" [(ngModel)]="gapsTrainingStatusFilter" (change)="gapsPage = 1; loadManagerSkillGaps()">
+              <option value="">Training Status</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="ASSIGNED">Assigned</option>
+              <option value="NOT_ASSIGNED">Not Assigned</option>
+            </select>
+            <select class="form-control filter-select" style="width:110px;" [(ngModel)]="gapsPageSize" (change)="gapsPage = 1; loadManagerSkillGaps()">
               <option [value]="5">5 Entries</option>
               <option [value]="10">10 Entries</option>
               <option [value]="20">20 Entries</option>
               <option [value]="50">50 Entries</option>
             </select>
+            <button class="btn btn-outline" (click)="clearGapsFilters()">Clear</button>
           </div>
 
+          <!-- Table -->
           <div class="table-responsive">
             <table class="table">
               <thead>
                 <tr>
                   <th (click)="toggleGapsSort('employeeName')" style="cursor:pointer; user-select:none;">Employee <span class="material-icons sort-icon">swap_vert</span></th>
-                  <th (click)="toggleGapsSort('skillName')" style="cursor:pointer; user-select:none;">Target Skill <span class="material-icons sort-icon">swap_vert</span></th>
-                  <th (click)="toggleGapsSort('requiredLevel')" style="cursor:pointer; user-select:none;">Required Rating <span class="material-icons sort-icon">swap_vert</span></th>
-                  <th (click)="toggleGapsSort('currentLevel')" style="cursor:pointer; user-select:none;">Current Rating <span class="material-icons sort-icon">swap_vert</span></th>
-                  <th (click)="toggleGapsSort('gap')" style="cursor:pointer; user-select:none;">Gap Difference <span class="material-icons sort-icon">swap_vert</span></th>
-                  <th (click)="toggleGapsSort('priority')" style="cursor:pointer; user-select:none;">Priority <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th>Code</th>
+                  <th>Department</th>
+                  <th (click)="toggleGapsSort('skillName')" style="cursor:pointer; user-select:none;">Skill Name <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleGapsSort('requiredRating')" style="cursor:pointer; user-select:none;">Required Rating <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleGapsSort('currentRating')" style="cursor:pointer; user-select:none;">Current Final Rating <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleGapsSort('skillGap')" style="cursor:pointer; user-select:none;">Skill Gap <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th (click)="toggleGapsSort('priority')" style="cursor:pointer; user-select:none;">Gap Priority <span class="material-icons sort-icon">swap_vert</span></th>
+                  <th>Training Status</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let item of paginatedTeamGaps">
-                  <td>{{ item.employeeName }}</td>
+                <tr *ngFor="let item of teamGaps">
+                  <td><strong>{{ item.employeeName }}</strong></td>
+                  <td><code>{{ item.employeeCode }}</code></td>
+                  <td style="font-size:12px; color:var(--text-muted);">{{ item.departmentName }}</td>
                   <td><strong>{{ item.skillName }}</strong></td>
+
+                  <!-- Required Rating (★ 5) -->
                   <td>
-                    <div style="display:flex; gap:2px;">
-                      <span *ngFor="let star of [1,2,3,4,5]" class="material-icons" style="font-size:14px;" [style.color]="item.requiredLevel >= star ? 'var(--primary)' : 'var(--border)'">star</span>
+                    <div style="display:flex; align-items:center; gap:4px;">
+                      <div style="display:flex; gap:1px;">
+                        <span *ngFor="let star of [1,2,3,4,5]" class="material-icons" style="font-size:13px;"
+                          [style.color]="star <= item.requiredRating ? 'var(--primary)' : 'var(--border)'">star</span>
+                      </div>
+                      <strong style="font-size:11px;">{{ item.requiredRating }}</strong>
                     </div>
                   </td>
+
+                  <!-- Current Final Rating (★ 3) -->
                   <td>
-                    <div style="display:flex; gap:2px;">
-                      <span *ngFor="let star of [1,2,3,4,5]" class="material-icons" style="font-size:14px;" [style.color]="item.currentLevel >= star ? 'var(--secondary)' : 'var(--border)'">star</span>
+                    <div style="display:flex; align-items:center; gap:4px;">
+                      <div style="display:flex; gap:1px;">
+                        <span *ngFor="let star of [1,2,3,4,5]" class="material-icons" style="font-size:13px;"
+                          [style.color]="star <= item.currentRating ? 'var(--success)' : 'var(--border)'">star</span>
+                      </div>
+                      <strong style="font-size:11px;">{{ item.currentRating }}</strong>
                     </div>
                   </td>
-                  <td><span class="text-error" style="font-weight:700;">+{{ item.gap }}</span></td>
+
+                  <!-- Skill Gap Stars (★ 2) -->
+                  <td>
+                    <div style="display:flex; align-items:center; gap:4px;">
+                      <div style="display:flex; gap:1px;">
+                        <span *ngFor="let star of [1,2,3,4,5]" class="material-icons" style="font-size:13px;"
+                          [style.color]="star <= item.skillGap ? 'var(--warning)' : 'var(--border)'">
+                          {{ star <= item.skillGap ? 'star' : 'star_border' }}
+                        </span>
+                      </div>
+                      <strong style="font-size:11px;" [style.color]="item.skillGap > 0 ? 'var(--warning)' : 'var(--success)'">{{ item.skillGap }}</strong>
+                    </div>
+                  </td>
+
+                  <!-- Priority Badge -->
                   <td>
                     <span class="badge" [ngClass]="{
-                      'badge-error': item.priority === 'CRITICAL' || item.priority === 'HIGH',
+                      'badge-success': item.priority === 'NONE' || item.skillGap <= 0,
+                      'badge-info':    item.priority === 'LOW',
                       'badge-warning': item.priority === 'MEDIUM',
-                      'badge-info': item.priority === 'LOW'
-                    }">{{ item.priority }}</span>
+                      'badge-error':   item.priority === 'HIGH'
+                    }">{{ item.gapPriorityLabel }}</span>
                   </td>
+
+                  <!-- Training Status Badge -->
                   <td>
-                    <button class="btn btn-primary btn-sm" style="padding:4px 8px; font-size:11px;" (click)="quickAssignTraining(item)">Recommend Training</button>
+                    <span class="badge" [ngClass]="{
+                      'badge-success': item.trainingStatus === 'COMPLETED' || item.trainingStatus === 'VERIFIED',
+                      'badge-warning': item.trainingStatus === 'IN_PROGRESS',
+                      'badge-info':    item.trainingStatus === 'ASSIGNED',
+                      'badge-secondary': item.trainingStatus === 'NOT_ASSIGNED'
+                    }">{{ item.trainingStatus === 'NOT_ASSIGNED' ? 'Not Assigned' : item.trainingStatus }}</span>
+                  </td>
+
+                  <!-- Action -->
+                  <td>
+                    <button class="btn btn-primary btn-sm" style="padding:4px 10px; font-size:11px;" (click)="openSkillDetailModal(item)">
+                      View Details
+                    </button>
                   </td>
                 </tr>
-                <tr *ngIf="paginatedTeamGaps.length === 0">
-                  <td colspan="7" class="text-center text-muted">No skill gaps detected in your direct team. Excellent work!</td>
+                <tr *ngIf="teamGaps.length === 0">
+                  <td colspan="10" class="text-center text-muted" style="padding:30px;">
+                    No skill gap records match the selected criteria.
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
 
+          <!-- Pagination Footer -->
           <div class="pagination-footer">
-            <span>Showing {{ paginatedTeamGaps.length }} of {{ filteredTeamGaps.length }} entries</span>
+            <span>Showing {{ teamGaps.length }} of {{ gapsTotal }} entries (Page {{ gapsPage }} of {{ gapsTotalPages }})</span>
             <div class="pag-buttons">
-              <button class="btn btn-outline-sm" [disabled]="gapsPage === 1" (click)="setGapsPage(gapsPage - 1)">Previous</button>
-              <button class="btn btn-outline-sm" [disabled]="gapsPage === totalGapsPages" (click)="setGapsPage(gapsPage + 1)">Next</button>
+              <button class="btn btn-outline-sm" [disabled]="gapsPage === 1" (click)="gapsPage = gapsPage - 1; loadManagerSkillGaps()">Previous</button>
+              <button class="btn btn-outline-sm" [disabled]="gapsPage >= gapsTotalPages" (click)="gapsPage = gapsPage + 1; loadManagerSkillGaps()">Next</button>
             </div>
           </div>
         </div>
@@ -969,6 +1080,79 @@ import { filter } from "rxjs/operators";
               <button class="btn btn-primary w-full" (click)="submitRejection('cert')">Submit Rejection</button>
             </div>
 
+            <!-- Employee Skill Detail & Rating Review Modal -->
+            <div *ngIf="activeModal === 'skillDetail'">
+              <div *ngIf="selectedGapItem">
+                <!-- Employee Profile Header -->
+                <div style="background:var(--surface-hover); padding:12px 14px; border-radius:8px; border:1px solid var(--border); margin-bottom:16px;">
+                  <h4 style="margin:0 0 4px; font-size:15px;">{{ selectedGapItem.employeeName }}</h4>
+                  <p style="margin:0; font-size:12px; color:var(--text-muted);">
+                    Code: <strong>{{ selectedGapItem.employeeCode }}</strong> · Department: <strong>{{ selectedGapItem.departmentName }}</strong>
+                  </p>
+                </div>
+
+                <!-- Skill & Star Rating Breakdown -->
+                <div style="margin-bottom:16px;">
+                  <h5 style="margin:0 0 8px; color:var(--primary); font-size:14px;">Skill: {{ selectedGapItem.skillName }}</h5>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:12px; margin-bottom:12px;">
+                    <div>
+                      <span style="color:var(--text-muted); font-size:11px; display:block;">Required Level</span>
+                      <div style="display:flex; align-items:center; gap:4px; margin-top:2px;">
+                        <span *ngFor="let star of [1,2,3,4,5]" class="material-icons" style="font-size:14px;" [style.color]="star <= selectedGapItem.requiredRating ? 'var(--primary)' : 'var(--border)'">star</span>
+                        <strong>{{ selectedGapItem.requiredRating }}</strong>
+                      </div>
+                    </div>
+                    <div>
+                      <span style="color:var(--text-muted); font-size:11px; display:block;">Current Final Rating</span>
+                      <div style="display:flex; align-items:center; gap:4px; margin-top:2px;">
+                        <span *ngFor="let star of [1,2,3,4,5]" class="material-icons" style="font-size:14px;" [style.color]="star <= selectedGapItem.currentRating ? 'var(--success)' : 'var(--border)'">star</span>
+                        <strong>{{ selectedGapItem.currentRating }}</strong>
+                      </div>
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:16px; align-items:center; font-size:12px; padding:8px 12px; background:rgba(251,191,36,0.06); border:1px solid rgba(251,191,36,0.2); border-radius:8px;">
+                    <span>Skill Gap: <strong style="color:var(--warning); font-size:13px;">{{ selectedGapItem.skillGap }} Stars</strong></span>
+                    <span>Priority: <span class="badge badge-warning">{{ selectedGapItem.gapPriorityLabel }}</span></span>
+                  </div>
+                </div>
+
+                <!-- Employee Self Assessment Comments -->
+                <div *ngIf="selectedGapItem.employeeComments" style="margin-bottom:16px; font-size:12px;">
+                  <label style="font-weight:700; color:var(--text-secondary);">Employee Self-Assessment Comments:</label>
+                  <p style="margin:4px 0 0; color:var(--text-muted); font-style:italic;">"{{ selectedGapItem.employeeComments }}"</p>
+                </div>
+
+                <!-- Manager Rating Review & Modification -->
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label style="font-weight:700;">Approve or Modify Final Rating (1 - 5)</label>
+                  <div style="display:flex; gap:6px; margin-top:6px;">
+                    <button *ngFor="let r of [1,2,3,4,5]" type="button"
+                      [class]="reviewFinalRating === r ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm'"
+                      (click)="reviewFinalRating = r">
+                      <span class="material-icons" style="font-size:13px;">star</span> {{ r }}
+                    </button>
+                  </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom:16px;">
+                  <label style="font-weight:700;">Manager Review Comments</label>
+                  <textarea class="form-control" [(ngModel)]="reviewComments" rows="3" placeholder="Add feedback or development goals..."></textarea>
+                </div>
+
+                <div *ngIf="actionError" class="error-banner">{{ actionError }}</div>
+
+                <!-- Action Buttons -->
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                  <button class="btn btn-primary" style="flex:1;" (click)="submitRatingReview()">
+                    Approve / Save Rating
+                  </button>
+                  <button class="btn btn-secondary" (click)="recommendTrainingForGap(selectedGapItem)">
+                    Assign Training
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <!-- Resume Preview / Feedback Modal -->
             <div *ngIf="activeModal === 'resumePreview'" class="resume-modal-body" style="max-height:80vh; overflow-y:auto; padding:10px;">
               <div *ngIf="resumePreviewData; else loadingResume" style="display:flex; flex-direction:column; gap:24px;">
@@ -1285,14 +1469,24 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
 
   // Sub tab: Gaps
   teamGaps: any[] = [];
-  filteredTeamGaps: any[] = [];
-  paginatedTeamGaps: any[] = [];
+  gapsSummary: any = null;
   gapsPage = 1;
   gapsPageSize = 10;
-  totalGapsPages = 1;
+  gapsTotal = 0;
+  gapsTotalPages = 1;
   gapsSearch = '';
-  gapsSortField = 'gap';
-  gapsSortOrder: 'asc' | 'desc' = 'desc';
+  gapsDeptFilter = '';
+  gapsSkillFilter = '';
+  gapsPriorityFilter = '';
+  gapsCurrentRatingFilter = '';
+  gapsRequiredRatingFilter = '';
+  gapsTrainingStatusFilter = '';
+  gapsSortField = 'employeeName';
+  gapsSortOrder: 'asc' | 'desc' = 'asc';
+  departmentsList: any[] = [];
+  selectedGapItem: any = null;
+  reviewFinalRating = 3;
+  reviewComments = '';
 
   // Sub tab: Resumes
   teamSummaryData: any;
@@ -1358,7 +1552,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
   sortOrder: "asc" | "desc" = "asc";
 
   // Modal setups
-  activeModal: "assignSkill" | "assignTraining" | "rejectAssess" | "rejectCert" | "resumePreview" | null = null;
+  activeModal: "assignSkill" | "assignTraining" | "rejectAssess" | "rejectCert" | "resumePreview" | "skillDetail" | null = null;
   modalTitle = "";
   actionError = "";
   rejectionComment = "";
@@ -1461,6 +1655,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
         this.teamMembers = res.data;
         this.applyTeamFilters();
         this.loadQueues(res.data.map((m: any) => m.id));
+        this.loadManagerSkillGaps();
       },
     });
   }
@@ -1540,6 +1735,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
 
   loadFormContexts() {
     this.dataService.getSkills({ limit: 100 }).subscribe((res) => (this.skillsList = res.data));
+    this.dataService.getDepartments().subscribe((res) => (this.departmentsList = res.data));
   }
 
   // ----------------------------------------------------
@@ -1722,59 +1918,52 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   // ----------------------------------------------------
-  // Sub tab Gaps filtering & pagination
+  // Sub tab Gaps filtering & PostgreSQL API Integration
   // ----------------------------------------------------
   calculateTeamGaps() {
-    const gaps: any[] = [];
-    this.teamMembers.forEach(emp => {
-      const requiredSkills = emp.designation?.skillRequirements || [];
-      const empSkills = this.allTeamSkills.filter(s => s.employeeId === emp.id);
-      const skillMap = new Map(empSkills.map(s => [s.skillId, s]));
-
-      requiredSkills.forEach((req: any) => {
-        const empSkill = skillMap.get(req.skillId);
-        const currentLevel = empSkill && empSkill.status === 'APPROVED' ? empSkill.finalRating : 0;
-        const gap = req.requiredLevel - currentLevel;
-        if (gap > 0) {
-          gaps.push({
-            employeeId: emp.id,
-            employeeCode: emp.employeeCode,
-            employeeName: `${emp.firstName} ${emp.lastName}`,
-            skillId: req.skillId,
-            skillName: req.skill?.skillName || 'Unknown Skill',
-            requiredLevel: req.requiredLevel,
-            currentLevel,
-            gap,
-            priority: gap >= 3 ? 'CRITICAL' : gap >= 2 ? 'HIGH' : 'MEDIUM'
-          });
-        }
-      });
-    });
-    this.teamGaps = gaps;
-    this.filterTeamGaps();
+    this.loadManagerSkillGaps();
   }
 
-  filterTeamGaps() {
-    let list = [...this.teamGaps];
-    if (this.gapsSearch.trim()) {
-      const q = this.gapsSearch.toLowerCase();
-      list = list.filter(item =>
-        item.employeeName.toLowerCase().includes(q) ||
-        item.skillName.toLowerCase().includes(q)
-      );
-    }
-    // Sort
-    list.sort((a, b) => {
-      let valA = a[this.gapsSortField];
-      let valB = b[this.gapsSortField];
-      if (typeof valA === 'string') {
-        return this.gapsSortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-      } else {
-        return this.gapsSortOrder === 'asc' ? valA - valB : valB - valA;
-      }
+  loadManagerSkillGaps() {
+    const params: any = {
+      search: this.gapsSearch,
+      departmentId: this.gapsDeptFilter,
+      skillId: this.gapsSkillFilter,
+      priority: this.gapsPriorityFilter,
+      currentRating: this.gapsCurrentRatingFilter,
+      requiredRating: this.gapsRequiredRatingFilter,
+      trainingStatus: this.gapsTrainingStatusFilter,
+      page: this.gapsPage,
+      pageSize: this.gapsPageSize,
+      sortBy: this.gapsSortField,
+      sortOrder: this.gapsSortOrder,
+    };
+
+    this.dataService.getManagerTeamSkillGaps(params).subscribe({
+      next: (res) => {
+        this.teamGaps = res.data || [];
+        this.gapsTotal = res.pagination?.total || 0;
+        this.gapsTotalPages = res.pagination?.totalPages || 1;
+      },
     });
-    this.filteredTeamGaps = list;
-    this.resetGapsPagination();
+
+    this.dataService.getManagerSkillGapSummary(params).subscribe({
+      next: (res) => {
+        this.gapsSummary = res.data;
+      },
+    });
+  }
+
+  clearGapsFilters() {
+    this.gapsSearch = '';
+    this.gapsDeptFilter = '';
+    this.gapsSkillFilter = '';
+    this.gapsPriorityFilter = '';
+    this.gapsCurrentRatingFilter = '';
+    this.gapsRequiredRatingFilter = '';
+    this.gapsTrainingStatusFilter = '';
+    this.gapsPage = 1;
+    this.loadManagerSkillGaps();
   }
 
   toggleGapsSort(field: string) {
@@ -1784,50 +1973,68 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
       this.gapsSortField = field;
       this.gapsSortOrder = 'asc';
     }
-    this.filterTeamGaps();
+    this.loadManagerSkillGaps();
   }
 
-  resetGapsPagination() {
-    this.gapsPage = 1;
-    this.calculateGapsPagination();
-  }
-
-  calculateGapsPagination() {
-    this.totalGapsPages = Math.ceil(this.filteredTeamGaps.length / Number(this.gapsPageSize)) || 1;
-    const startIdx = (this.gapsPage - 1) * Number(this.gapsPageSize);
-    this.paginatedTeamGaps = this.filteredTeamGaps.slice(startIdx, startIdx + Number(this.gapsPageSize));
-  }
-
-  setGapsPage(page: number) {
-    this.gapsPage = page;
-    this.calculateGapsPagination();
-  }
-
-  quickAssignTraining(item: any) {
-    this.openModal('assignTraining');
-    this.trainingForm.patchValue({
-      employeeId: item.employeeId,
-      skillId: item.skillId,
-      trainingTitle: `Accelerated Skill Path: ${item.skillName}`,
-      trainingCode: `TR-PATH-${Math.floor(100 + Math.random() * 900)}`
+  exportGapsCSV() {
+    const params: any = {
+      search: this.gapsSearch,
+      departmentId: this.gapsDeptFilter,
+      skillId: this.gapsSkillFilter,
+      priority: this.gapsPriorityFilter,
+      currentRating: this.gapsCurrentRatingFilter,
+      requiredRating: this.gapsRequiredRatingFilter,
+      trainingStatus: this.gapsTrainingStatusFilter,
+    };
+    this.dataService.exportManagerTeamSkillGaps(params).subscribe({
+      next: (csvData: any) => {
+        const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'Team_Skill_Gaps_Overview.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      },
     });
   }
 
-  exportGaps(type: string) {
-    const headers = ["Employee Name", "Target Skill", "Required Rating", "Current Rating", "Gap Difference", "Priority"];
-    const rows = this.filteredTeamGaps.map(item => [
-      item.employeeName,
-      item.skillName,
-      `Level ${item.requiredLevel}`,
-      `Level ${item.currentLevel}`,
-      `+${item.gap}`,
-      item.priority
-    ]);
-    if (type === 'csv') exportToCsv(headers, rows, "Team_Skill_Gaps");
-    else if (type === 'excel') exportToExcel(headers, rows, "Team_Skill_Gaps");
-    else if (type === 'pdf') exportToPdf(headers, rows, "Team_Skill_Gaps");
-    else if (type === 'print') printTable(headers, rows, "Team Skill Gaps Report");
+  openSkillDetailModal(item: any) {
+    this.selectedGapItem = item;
+    this.reviewFinalRating = item.currentRating || 3;
+    this.reviewComments = item.managerFeedback || '';
+    this.actionError = '';
+    this.openModal('skillDetail', `Employee Skill Detail: ${item.employeeName} - ${item.skillName}`);
   }
+
+  submitRatingReview() {
+    if (!this.selectedGapItem) return;
+    this.dataService.reviewAssessment(this.selectedGapItem.employeeSkillId, {
+      finalRating: this.reviewFinalRating,
+      status: 'APPROVED',
+      managerFeedback: this.reviewComments,
+    }).subscribe({
+      next: () => {
+        this.closeModal();
+        this.loadManagerSkillGaps();
+      },
+      error: (err) => (this.actionError = err?.error?.message || 'Failed to update rating review.'),
+    });
+  }
+
+  recommendTrainingForGap(item: any) {
+    this.closeModal();
+    this.trainingForm.patchValue({
+      employeeId: item.employeeId,
+      skillId: item.skillId,
+      trainingTitle: `Skill Gap Training: ${item.skillName}`,
+      trainingCode: `TR-${Math.floor(100 + Math.random() * 900)}`,
+    });
+    this.openModal('assignTraining', `Assign Training for ${item.employeeName}`);
+  }
+
+
 
   // ----------------------------------------------------
   // Sub tab Trainings filtering & pagination
@@ -2085,13 +2292,15 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
   // ----------------------------------------------------
   // Modal Overlays Managers Handling
   // ----------------------------------------------------
-  openModal(type: "assignSkill" | "assignTraining" | "rejectAssess" | "rejectCert") {
+  openModal(type: "assignSkill" | "assignTraining" | "rejectAssess" | "rejectCert" | "resumePreview" | "skillDetail", title: string = '') {
     this.activeModal = type;
     this.actionError = "";
-    if (type === "assignSkill") this.modalTitle = "Assign Skill Requirement";
+    if (title) this.modalTitle = title;
+    else if (type === "assignSkill") this.modalTitle = "Assign Skill Requirement";
     else if (type === "assignTraining") this.modalTitle = "Assign Team Training Course";
     else if (type === "rejectAssess") this.modalTitle = "Reject Self-Assessment Rating";
     else if (type === "rejectCert") this.modalTitle = "Reject Uploaded Certificate Credentials";
+    else if (type === "skillDetail") this.modalTitle = "Employee Skill Detail & Review";
   }
 
   closeModal() {
@@ -2132,7 +2341,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   loadTeamSummary() {
-    const managerId = this.currentUser?.employeeId;
+    const managerId = this.currentUser?.employeeId || this.currentUser?.id;
     if (!managerId) return;
     this.dataService.getTeamSummary(managerId).subscribe({
       next: (res) => {
@@ -2143,15 +2352,15 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   filterManagerTeam() {
-    if (!this.teamSummaryData) return;
+    if (!this.teamSummaryData || !this.teamSummaryData.teamMembers) return;
     let list = [...this.teamSummaryData.teamMembers];
 
     // Search text filter
-    if (this.resumeSearchText.trim()) {
+    if (this.resumeSearchText && this.resumeSearchText.trim()) {
       const q = this.resumeSearchText.toLowerCase();
       list = list.filter(m => 
         (m.firstName + ' ' + m.lastName).toLowerCase().includes(q) ||
-        m.employeeCode.toLowerCase().includes(q)
+        (m.employeeCode && m.employeeCode.toLowerCase().includes(q))
       );
     }
 
@@ -2184,8 +2393,8 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   getEmployeeActiveProjects(employeeId: string): any[] {
-    if (!this.teamSummaryData) return [];
-    return this.teamSummaryData.employeeContributions.filter((c: any) => c.employeeId === employeeId && c.status === 'ACTIVE');
+    if (!this.teamSummaryData || !this.teamSummaryData.employeeContributions) return [];
+    return this.teamSummaryData.employeeContributions.filter((c: any) => c.employeeId === employeeId);
   }
 
   viewMemberFullResume(member: any) {

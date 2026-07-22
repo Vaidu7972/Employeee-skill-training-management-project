@@ -523,25 +523,36 @@ async function main() {
   for (let eIdx = 0; eIdx < employeeRecords.length; eIdx++) {
     const emp = employeeRecords[eIdx];
     
-    // Assign 2 to 3 skills per employee
-    const skillsToAssign = 2 + (eIdx % 2); // 2 or 3
+    // Assign 3 to 4 skills per employee for realistic dataset
+    const skillsToAssign = 3 + (eIdx % 2); // 3 or 4
     for (let sIdx = 0; sIdx < skillsToAssign; sIdx++) {
-      if (skillAssignmentsCount >= 150) break;
-      const sk = skillRecords[(eIdx * 2 + sIdx) % skillRecords.length];
+      if (skillAssignmentsCount >= 200) break;
+      const sk = skillRecords[(eIdx * 3 + sIdx) % skillRecords.length];
 
-      const ratingVal = 1 + (sIdx % 4); // 1 to 4
-      const statusVal = sIdx === 0 ? SkillRatingStatus.APPROVED : sIdx === 1 ? SkillRatingStatus.SUBMITTED : SkillRatingStatus.NEEDS_CHANGES;
+      // Determine explicit finalRating to produce No, Low, Medium, and High Gaps
+      // sIdx % 4 determines gap type: 0 -> No Gap, 1 -> Low Gap (1), 2 -> Medium Gap (2), 3 -> High Gap (3)
+      const reqLevel = sk.defaultRequiredLevel || 4;
+      let finalRatingVal = reqLevel;
+      if (sIdx % 4 === 1) {
+        finalRatingVal = Math.max(1, reqLevel - 1); // Low Gap (1)
+      } else if (sIdx % 4 === 2) {
+        finalRatingVal = Math.max(1, reqLevel - 2); // Medium Gap (2)
+      } else if (sIdx % 4 === 3) {
+        finalRatingVal = Math.max(1, reqLevel - 3); // High Gap (3+)
+      }
+      const selfRatingVal = Math.min(5, finalRatingVal + 1);
+      const statusVal = sIdx % 2 === 0 ? SkillRatingStatus.APPROVED : SkillRatingStatus.SUBMITTED;
 
       const empSkill = await prisma.employeeSkill.create({
         data: {
           employeeId: emp.id,
           skillId: sk.id,
-          selfRating: ratingVal,
-          finalRating: statusVal === SkillRatingStatus.APPROVED ? ratingVal : 1,
+          selfRating: selfRatingVal,
+          finalRating: finalRatingVal,
           status: statusVal,
           experienceMonths: 6 + (eIdx * 2),
-          employeeComments: "Familiar with this skill from current and past client projects.",
-          managerFeedback: statusVal === SkillRatingStatus.APPROVED ? "Satisfactory performance reviewed." : undefined,
+          employeeComments: "Self-assessed based on project deliverables and technical experience.",
+          managerFeedback: statusVal === SkillRatingStatus.APPROVED ? "Rating reviewed and validated." : undefined,
         },
       });
       skillAssignmentsCount++;
@@ -551,7 +562,7 @@ async function main() {
         await prisma.skillRatingHistory.create({
           data: {
             employeeSkillId: empSkill.id,
-            rating: ratingVal,
+            rating: selfRatingVal,
             source: RatingSource.SELF,
             updatedById: emp.userId || userAdmin.id,
             comments: "Self assessment rating submitted.",
@@ -563,7 +574,7 @@ async function main() {
           await prisma.skillRatingHistory.create({
             data: {
               employeeSkillId: empSkill.id,
-              rating: ratingVal,
+              rating: finalRatingVal,
               source: RatingSource.MANAGER,
               updatedById: managerRecords[0].userId!,
               comments: "Manager approved.",
