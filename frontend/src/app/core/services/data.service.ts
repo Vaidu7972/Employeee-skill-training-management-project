@@ -30,6 +30,10 @@ export class DataService {
     return this.http.get<any>(`${this.baseApi}/employees`, { params: this.buildParams(query) });
   }
 
+  getEmployeeById(id: string): Observable<any> {
+    return this.http.get<any>(`${this.baseApi}/employees/${id}`);
+  }
+
   createEmployee(body: any): Observable<any> {
     return this.http.post<any>(`${this.baseApi}/employees`, body);
   }

@@ -7,6 +7,7 @@ import {
   exportAuditLogs,
   getErrorLogs,
   exportErrorLogs,
+  updateErrorLogStatus,
   getNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
@@ -21,13 +22,14 @@ const router = Router();
 // Dashboard Compile Statistics
 router.get("/dashboard/admin", authenticateJWT, requireRoles([SystemRole.ADMIN]), getAdminDashboard);
 router.get("/dashboard/manager", authenticateJWT, requireRoles([SystemRole.ADMIN, SystemRole.MANAGER]), getManagerDashboard);
-router.get("/dashboard/employee", authenticateJWT, requireRoles([SystemRole.EMPLOYEE]), getEmployeeDashboard);
+router.get("/dashboard/employee", authenticateJWT, requireRoles([SystemRole.EMPLOYEE, SystemRole.MANAGER, SystemRole.ADMIN]), getEmployeeDashboard);
 
 // Administration & System Activity Logs Grids & Exports (Available for all authenticated dashboard views)
 router.get("/audit-logs/export", authenticateJWT, exportAuditLogs);
 router.get("/audit-logs", authenticateJWT, getAuditLogs);
 router.get("/error-logs/export", authenticateJWT, exportErrorLogs);
 router.get("/error-logs", authenticateJWT, getErrorLogs);
+router.patch("/error-logs/:id/status", authenticateJWT, requireRoles([SystemRole.ADMIN]), updateErrorLogStatus);
 
 // Notifications System
 router.get("/notifications", authenticateJWT, getNotifications);

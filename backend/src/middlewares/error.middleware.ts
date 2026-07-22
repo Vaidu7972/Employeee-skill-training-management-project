@@ -9,12 +9,16 @@ const maskBody = (body: any): string => {
   if (!body) return "";
   try {
     const cloned = JSON.parse(JSON.stringify(body));
-    const sensitiveKeys = ["password", "passwordConfirm", "token", "refreshToken", "accessToken", "oldPassword", "newPassword"];
+    const sensitiveKeys = [
+      "password", "passwordConfirm", "token", "refreshToken",
+      "accessToken", "oldPassword", "newPassword", "authorization",
+      "secret", "creditCard", "ssn"
+    ];
     
     const maskObject = (obj: any) => {
       for (const key in obj) {
-        if (sensitiveKeys.includes(key)) {
-          obj[key] = "********";
+        if (sensitiveKeys.map(k => k.toLowerCase()).includes(key.toLowerCase())) {
+          obj[key] = "[REDACTED]";
         } else if (typeof obj[key] === "object" && obj[key] !== null) {
           maskObject(obj[key]);
         }
@@ -59,17 +63,22 @@ export const globalErrorHandler = async (
         userId,
         endpoint,
         method,
+        errorCode: `ERR-${statusCode}`,
         errorType: errorCode.toString(),
+        category: statusCode >= 500 ? "DATABASE" : (statusCode === 401 || statusCode === 403 ? "SECURITY" : "VALIDATION"),
         errorMessage,
+        technicalMessage: err.stack ? err.stack.split("\n")[0] : errorMessage,
         stackTrace: err.stack || null,
         requestBody,
         statusCode,
+        severity: statusCode >= 500 ? "CRITICAL" : (statusCode === 403 ? "WARNING" : "ERROR"),
+        resolutionStatus: "OPEN",
         ipAddress,
         userAgent,
       },
     });
   } catch (dbErr) {
-    // If database logging fails (e.g. table doesn't exist yet or connection down), log to winston
+    // If database logging fails, log to winston
     logger.error("Failed to log error to PostgreSQL database: " + (dbErr as Error).message);
   }
 

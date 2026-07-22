@@ -424,59 +424,69 @@ async function main() {
 
   for (let eIdx = 0; eIdx < allPeople.length; eIdx++) {
     const person = allPeople[eIdx];
-    const skillsToAssign = 3 + (eIdx % 3); // 3-5 skills per person
+    
+    // Fetch role requirements for this person's designation
+    const roleReqs = await prisma.roleSkillRequirement.findMany({
+      where: { designationId: person.designationId },
+      include: { skill: true }
+    });
 
-    for (let sIdx = 0; sIdx < skillsToAssign; sIdx++) {
-      const sk = skillRecords[(eIdx * 3 + sIdx) % skillRecords.length];
-      const reqLevel = sk.defaultRequiredLevel || 3;
-      
-      let finalRatingVal = reqLevel;
-      if (sIdx % 4 === 1) finalRatingVal = Math.max(1, reqLevel - 1);
-      else if (sIdx % 4 === 2) finalRatingVal = Math.max(1, reqLevel - 2);
-      else if (sIdx % 4 === 3) finalRatingVal = Math.max(1, reqLevel - 3);
+    const assignedSkillIds = new Set<string>();
 
-      const selfRatingVal = Math.min(5, finalRatingVal + 1);
-      const statusVal = (eIdx + sIdx) % 3 === 0 ? SkillRatingStatus.SUBMITTED : (eIdx + sIdx) % 3 === 1 ? SkillRatingStatus.APPROVED : SkillRatingStatus.REJECTED;
+    // 1. Assign role required skills as APPROVED with required level or higher
+    for (const req of roleReqs) {
+      assignedSkillIds.add(req.skillId);
+      const lvl = Math.min(5, req.requiredLevel);
+      const empSkill = await prisma.employeeSkill.create({
+        data: {
+          employeeId: person.id,
+          skillId: req.skillId,
+          selfRating: lvl,
+          finalRating: lvl,
+          status: SkillRatingStatus.APPROVED,
+          experienceMonths: 24 + (eIdx * 2),
+          employeeComments: "Demonstrated proficiency in project deliverables.",
+          managerFeedback: "Validated and verified as per department benchmarks.",
+          approvedAt: new Date("2026-05-10"),
+        },
+      });
+      totalSkillAssignments++;
+      totalReviewsCount++;
+
+      await prisma.skillRatingHistory.create({
+        data: {
+          employeeSkillId: empSkill.id,
+          rating: lvl,
+          source: RatingSource.MANAGER,
+          updatedById: managerRecords[0].userId!,
+          comments: "Manager verified role capability.",
+        },
+      });
+    }
+
+    // 2. Assign 2-3 additional catalog skills
+    const additionalSkills = skillRecords.filter(s => !assignedSkillIds.has(s.id)).slice(0, 3);
+    for (let aIdx = 0; aIdx < additionalSkills.length; aIdx++) {
+      const sk = additionalSkills[aIdx];
+      const statusVal = aIdx === 0 ? SkillRatingStatus.APPROVED : aIdx === 1 ? SkillRatingStatus.SUBMITTED : SkillRatingStatus.APPROVED;
+      const lvl = aIdx === 0 ? 5 : 3;
 
       const empSkill = await prisma.employeeSkill.create({
         data: {
           employeeId: person.id,
           skillId: sk.id,
-          selfRating: selfRatingVal,
-          finalRating: finalRatingVal,
+          selfRating: lvl,
+          finalRating: statusVal === SkillRatingStatus.APPROVED ? lvl : undefined,
           status: statusVal,
-          experienceMonths: 12 + (eIdx * 2),
-          employeeComments: "Assessed based on recent project tasks.",
-          managerFeedback: statusVal === SkillRatingStatus.APPROVED ? "Validated in quarterly review." : statusVal === SkillRatingStatus.REJECTED ? "Requires additional assessment code samples." : undefined,
-          approvedAt: statusVal === SkillRatingStatus.APPROVED ? new Date("2026-05-10") : undefined,
+          experienceMonths: 18,
+          employeeComments: "Pursuing self-learning module.",
+          managerFeedback: statusVal === SkillRatingStatus.APPROVED ? "Approved elective skill." : undefined,
+          approvedAt: statusVal === SkillRatingStatus.APPROVED ? new Date("2026-05-12") : undefined,
         },
       });
       totalSkillAssignments++;
-      if (statusVal === SkillRatingStatus.SUBMITTED || statusVal === SkillRatingStatus.APPROVED || statusVal === SkillRatingStatus.REJECTED) {
+      if (statusVal === SkillRatingStatus.APPROVED || statusVal === SkillRatingStatus.SUBMITTED) {
         totalReviewsCount++;
-      }
-
-      // Rating History Log
-      await prisma.skillRatingHistory.create({
-        data: {
-          employeeSkillId: empSkill.id,
-          rating: selfRatingVal,
-          source: RatingSource.SELF,
-          updatedById: person.userId || userAdmin.id,
-          comments: "Self rating updated.",
-        },
-      });
-
-      if (statusVal === SkillRatingStatus.APPROVED) {
-        await prisma.skillRatingHistory.create({
-          data: {
-            employeeSkillId: empSkill.id,
-            rating: finalRatingVal,
-            source: RatingSource.MANAGER,
-            updatedById: managerRecords[0].userId!,
-            comments: "Manager approved rating.",
-          },
-        });
       }
     }
   }
@@ -655,90 +665,183 @@ async function main() {
     });
   }
 
-  // 13. Audit Logs (75+ entries covering all 27 specified actions)
-  console.log("Seeding 75+ Audit Logs...");
-  const auditActions = [
-    { action: "LOGIN", comp: "AUTH" },
-    { action: "LOGOUT", comp: "AUTH" },
-    { action: "EMPLOYEE_CREATED", comp: "EMPLOYEE" },
-    { action: "EMPLOYEE_UPDATED", comp: "EMPLOYEE" },
-    { action: "EMPLOYEE_ACTIVATED", comp: "EMPLOYEE" },
-    { action: "EMPLOYEE_DEACTIVATED", comp: "EMPLOYEE" },
-    { action: "MANAGER_CREATED", comp: "MANAGER" },
-    { action: "MANAGER_ASSIGNED", comp: "MANAGER" },
-    { action: "MANAGER_REASSIGNED", comp: "MANAGER" },
-    { action: "DEPARTMENT_CREATED", comp: "DEPARTMENT" },
-    { action: "DEPARTMENT_UPDATED", comp: "DEPARTMENT" },
-    { action: "SKILL_CREATED", comp: "SKILL" },
-    { action: "SKILL_ASSIGNED", comp: "SKILL" },
-    { action: "SKILL_RATING_REVIEWED", comp: "SKILL" },
-    { action: "TRAINING_CREATED", comp: "TRAINING" },
-    { action: "TRAINING_ASSIGNED", comp: "TRAINING" },
-    { action: "TRAINING_UPDATED", comp: "TRAINING" },
-    { action: "CERTIFICATE_VERIFIED", comp: "CERTIFICATE" },
-    { action: "CERTIFICATE_REJECTED", comp: "CERTIFICATE" },
-    { action: "PROJECT_CREATED", comp: "PROJECT" },
-    { action: "EMPLOYEE_ASSIGNED_TO_PROJECT", comp: "PROJECT" },
-    { action: "SUPPORT_TICKET_CREATED", comp: "TICKET" },
-    { action: "SUPPORT_TICKET_REPLIED", comp: "TICKET" },
-    { action: "SUPPORT_TICKET_RESOLVED", comp: "TICKET" },
-    { action: "SUPPORT_TICKET_CLOSED", comp: "TICKET" },
-    { action: "RESUME_DOWNLOADED", comp: "RESUME" },
-    { action: "REPORT_EXPORTED", comp: "REPORT" }
+  // 13. Audit Logs (120+ entries covering all specified actions & categories)
+  console.log("Seeding 120+ Audit Logs...");
+  await prisma.auditLog.deleteMany({});
+
+  const auditActionsList = [
+    // AUTHENTICATION
+    { action: "LOGIN_SUCCESS", comp: "AUTH", desc: "User authenticated successfully via credentials" },
+    { action: "LOGIN_FAILED", comp: "AUTH", desc: "Failed authentication attempt: invalid credentials" },
+    { action: "LOGOUT", comp: "AUTH", desc: "User logged out of active portal session" },
+    { action: "PASSWORD_CHANGED", comp: "AUTH", desc: "User updated account password successfully" },
+    { action: "PASSWORD_RESET", comp: "AUTH", desc: "Administrative password reset issued" },
+    { action: "ACCOUNT_LOCKED", comp: "AUTH", desc: "Account temporarily locked due to excessive failed attempts" },
+    { action: "ACCOUNT_ACTIVATED", comp: "AUTH", desc: "Account activated by Administrator" },
+    { action: "ACCOUNT_DEACTIVATED", comp: "AUTH", desc: "Account deactivated by Administrator" },
+    // EMPLOYEE MANAGEMENT
+    { action: "EMPLOYEE_CREATED", comp: "EMPLOYEE", desc: "New employee record created in directory" },
+    { action: "EMPLOYEE_UPDATED", comp: "EMPLOYEE", desc: "Employee profile details modified" },
+    { action: "EMPLOYEE_ACTIVATED", comp: "EMPLOYEE", desc: "Employee account status set to ACTIVE" },
+    { action: "EMPLOYEE_DEACTIVATED", comp: "EMPLOYEE", desc: "Employee account status set to INACTIVE" },
+    { action: "EMPLOYEE_PROFILE_UPDATED", comp: "EMPLOYEE", desc: "Personal bio and objective information updated" },
+    { action: "EMPLOYEE_CSV_EXPORTED", comp: "EMPLOYEE", desc: "Employee directory dataset exported to CSV" },
+    { action: "EMPLOYEE_CSV_IMPORTED", comp: "EMPLOYEE", desc: "Bulk employee directory imported from CSV file" },
+    // MANAGER MANAGEMENT
+    { action: "MANAGER_CREATED", comp: "MANAGER", desc: "Manager role assigned to user account" },
+    { action: "MANAGER_UPDATED", comp: "MANAGER", desc: "Manager profile and leadership settings modified" },
+    { action: "MANAGER_ASSIGNED", comp: "MANAGER", desc: "Employee assigned to report to manager" },
+    { action: "MANAGER_REASSIGNED", comp: "MANAGER", desc: "Employee reassigned to new manager" },
+    { action: "MANAGER_CAPACITY_UPDATED", comp: "MANAGER", desc: "Manager team capacity threshold updated" },
+    { action: "AUTO_MANAGER_ASSIGNMENT_COMPLETED", comp: "MANAGER", desc: "Automatic team load-balancing completed" },
+    // DEPARTMENT AND DESIGNATION
+    { action: "DEPARTMENT_CREATED", comp: "DEPARTMENT", desc: "New organizational department created" },
+    { action: "DEPARTMENT_UPDATED", comp: "DEPARTMENT", desc: "Department details updated" },
+    { action: "DEPARTMENT_DEACTIVATED", comp: "DEPARTMENT", desc: "Department deactivated from active hierarchy" },
+    { action: "DESIGNATION_CREATED", comp: "DESIGNATION", desc: "New job title designation registered" },
+    { action: "DESIGNATION_UPDATED", comp: "DESIGNATION", desc: "Designation skill matrix requirements modified" },
+    // SKILLS
+    { action: "SKILL_CREATED", comp: "SKILL", desc: "New skill entry added to master skill catalog" },
+    { action: "SKILL_UPDATED", comp: "SKILL", desc: "Skill code and description updated" },
+    { action: "SKILL_ASSIGNED", comp: "SKILL", desc: "Skill requirement assigned to employee" },
+    { action: "SKILL_REMOVED", comp: "SKILL", desc: "Skill requirement removed from employee profile" },
+    { action: "SKILL_REQUEST_SUBMITTED", comp: "SKILL", desc: "Employee submitted request to add new skill to catalog" },
+    { action: "SKILL_REQUEST_APPROVED", comp: "SKILL", desc: "Manager approved pending skill request" },
+    { action: "SKILL_REQUEST_REJECTED", comp: "SKILL", desc: "Manager rejected pending skill request" },
+    { action: "SELF_ASSESSMENT_SUBMITTED", comp: "SKILL", desc: "Employee completed self-assessment rating evaluation" },
+    { action: "SKILL_RATING_APPROVED", comp: "SKILL", desc: "Manager approved employee self-rating" },
+    { action: "SKILL_RATING_REJECTED", comp: "SKILL", desc: "Manager rejected employee self-rating" },
+    { action: "FINAL_RATING_UPDATED", comp: "SKILL", desc: "Manager verified final proficiency level for employee" },
+    // TRAINING
+    { action: "TRAINING_CREATED", comp: "TRAINING", desc: "New training plan added to system" },
+    { action: "TRAINING_ASSIGNED", comp: "TRAINING", desc: "Training plan assigned to employee" },
+    { action: "TRAINING_PROGRESS_UPDATED", comp: "TRAINING", desc: "Employee logged training hours progress" },
+    { action: "TRAINING_SUBMITTED", comp: "TRAINING", desc: "Training plan submitted for manager verification" },
+    { action: "TRAINING_COMPLETED", comp: "TRAINING", desc: "Training plan marked completed by manager" },
+    { action: "TRAINING_VERIFIED", comp: "TRAINING", desc: "Training completion verified by reviewer" },
+    { action: "TRAINING_CANCELLED", comp: "TRAINING", desc: "Assigned training cancelled" },
+    { action: "TRAINING_MARKED_OVERDUE", comp: "TRAINING", desc: "Training flagged overdue past target due date" },
+    // CERTIFICATES
+    { action: "CERTIFICATE_UPLOADED", comp: "CERTIFICATE", desc: "Employee uploaded completion certificate document" },
+    { action: "CERTIFICATE_VERIFIED", comp: "CERTIFICATE", desc: "Manager verified authenticity of certificate" },
+    { action: "CERTIFICATE_REJECTED", comp: "CERTIFICATE", desc: "Certificate rejected due to invalid document format" },
+    { action: "CERTIFICATE_REPLACED", comp: "CERTIFICATE", desc: "Updated certificate uploaded replacing previous file" },
+    { action: "CERTIFICATE_DOWNLOADED", comp: "CERTIFICATE", desc: "Certificate attachment downloaded" },
+    // PROJECTS AND RESUMES
+    { action: "PROJECT_CREATED", comp: "PROJECT", desc: "New client project registered" },
+    { action: "PROJECT_UPDATED", comp: "PROJECT", desc: "Project allocation and milestones updated" },
+    { action: "EMPLOYEE_ASSIGNED_TO_PROJECT", comp: "PROJECT", desc: "Employee assigned to project team" },
+    { action: "PROJECT_PROGRESS_UPDATED", comp: "PROJECT", desc: "Project completion percentage updated" },
+    { action: "PROJECT_COMPLETED", comp: "PROJECT", desc: "Project marked completed and archived" },
+    { action: "RESUME_GENERATED", comp: "RESUME", desc: "Dynamic PDF resume generated for employee" },
+    { action: "RESUME_DOWNLOADED", comp: "RESUME", desc: "Employee resume downloaded" },
+    { action: "TEAM_RESUME_DOWNLOADED", comp: "RESUME", desc: "Manager downloaded compiled team resume portfolio" },
+    // SUPPORT TICKETS
+    { action: "TICKET_CREATED", comp: "TICKET", desc: "Support ticket opened" },
+    { action: "TICKET_ASSIGNED", comp: "TICKET", desc: "Support ticket assigned to admin agent" },
+    { action: "TICKET_REPLY_ADDED", comp: "TICKET", desc: "Response message posted to support ticket thread" },
+    { action: "TICKET_INTERNAL_NOTE_ADDED", comp: "TICKET", desc: "Internal note added to ticket history" },
+    { action: "TICKET_PRIORITY_CHANGED", comp: "TICKET", desc: "Ticket priority escalated" },
+    { action: "TICKET_STATUS_CHANGED", comp: "TICKET", desc: "Ticket status changed" },
+    { action: "TICKET_RESOLVED", comp: "TICKET", desc: "Ticket marked resolved" },
+    { action: "TICKET_CLOSED", comp: "TICKET", desc: "Ticket closed" },
+    { action: "TICKET_REOPENED", comp: "TICKET", desc: "Ticket reopened by employee" },
+    { action: "TICKET_ATTACHMENT_UPLOADED", comp: "TICKET", desc: "Attachment uploaded to support ticket" },
+    // REPORTS
+    { action: "REPORT_VIEWED", comp: "REPORT", desc: "Analytics report opened" },
+    { action: "REPORT_FILTERED", comp: "REPORT", desc: "Applied custom criteria filters to report view" },
+    { action: "REPORT_CSV_EXPORTED", comp: "REPORT", desc: "Exported report to CSV" },
+    { action: "REPORT_EXCEL_EXPORTED", comp: "REPORT", desc: "Exported report to Excel" },
+    { action: "REPORT_PDF_EXPORTED", comp: "REPORT", desc: "Exported report to PDF" },
+    { action: "REPORT_PRINTED", comp: "REPORT", desc: "Report document sent to printer" }
   ];
 
-  for (let i = 0; i < 78; i++) {
-    const actObj = auditActions[i % auditActions.length];
-    const userId = allPeople[i % allPeople.length].userId || userAdmin.id;
+  for (let i = 0; i < 125; i++) {
+    const actObj = auditActionsList[i % auditActionsList.length];
+    const userObj = allPeople[i % allPeople.length];
+    const userId = userObj.userId || userAdmin.id;
 
     await prisma.auditLog.create({
       data: {
         userId: userId,
         action: actObj.action,
         component: actObj.comp,
+        description: `${actObj.desc} (Ref #${1000 + i})`,
+        entityName: actObj.comp,
+        entityId: `ENT-${2000 + i}`,
         oldValue: { status: "DRAFT", step: i, previousRole: "EMPLOYEE" },
         newValue: { status: "ACTIVE", step: i + 1, updatedRole: "MANAGER" },
         ipAddress: `192.168.1.${10 + (i % 50)}`,
-        createdAt: new Date(Date.now() - (78 - i) * 3600 * 1000 * 4),
+        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
+        requestMethod: i % 2 === 0 ? "POST" : "GET",
+        endpoint: `/api/${actObj.comp.toLowerCase()}/action`,
+        createdAt: new Date(Date.now() - (125 - i) * 3600 * 1000 * 5),
       },
     });
   }
 
-  // 14. Error Logs (50+ entries covering all specified error types)
-  console.log("Seeding 50+ Error Logs...");
-  const errorTypes = [
-    { type: "VALIDATION_ERROR", msg: "Invalid input: email format is incorrect", code: 400, end: "/api/employees" },
-    { type: "DUPLICATE_EMAIL_ERROR", msg: "Employee email already exists in system", code: 409, end: "/api/employees" },
-    { type: "DUPLICATE_SKILL_ERROR", msg: "Skill code SK-001 already registered", code: 409, end: "/api/skills" },
-    { type: "AUTHENTICATION_ERROR", msg: "Invalid JWT signature or token expired", code: 401, end: "/api/auth/login" },
-    { type: "AUTHORIZATION_ERROR", msg: "Access forbidden: ADMIN role required", code: 403, end: "/api/reports/audit" },
-    { type: "POSTGRESQL_ERROR", msg: "Connection timeout while executing query on employees table", code: 500, end: "/api/org/departments" },
-    { type: "FOREIGN_KEY_ERROR", msg: "Foreign key constraint failure on manager_id", code: 400, end: "/api/manager/assign" },
-    { type: "FILE_UPLOAD_ERROR", msg: "File size exceeds maximum limit of 5MB", code: 400, end: "/api/certificates/upload" },
-    { type: "INVALID_DATE_ERROR", msg: "End date cannot be prior to start date", code: 400, end: "/api/projects" },
-    { type: "API_TIMEOUT_ERROR", msg: "Upstream service timeout after 10000ms", code: 504, end: "/api/reports/skills" },
-    { type: "REPORT_EXPORT_ERROR", msg: "Memory limit reached while rendering PDF document", code: 500, end: "/api/reports/export" },
-    { type: "TICKET_ATTACHMENT_ERROR", msg: "Attachment MIME type unsupported", code: 400, end: "/api/ticket/attachment" },
-    { type: "RESUME_GENERATION_ERROR", msg: "Failed to render PDF template for employee resume", code: 500, end: "/api/resume/download" }
+  // 14. Error Logs (85+ entries covering all specified error types & categories)
+  console.log("Seeding 85+ Error Logs...");
+  await prisma.errorLog.deleteMany({});
+
+  const errorTypesList = [
+    // VALIDATION ERRORS
+    { type: "VALIDATION_ERROR", cat: "VALIDATION", msg: "Invalid input: email format is incorrect", code: 400, end: "/api/employees", errCode: "VAL-001", sev: "WARNING" },
+    { type: "DUPLICATE_EMAIL_ERROR", cat: "VALIDATION", msg: "Employee email already exists in system", code: 409, end: "/api/employees", errCode: "VAL-002", sev: "ERROR" },
+    { type: "DUPLICATE_SKILL_ERROR", cat: "VALIDATION", msg: "Skill code SK-001 already registered", code: 409, end: "/api/skills", errCode: "VAL-003", sev: "ERROR" },
+    { type: "INVALID_RATING_ERROR", cat: "VALIDATION", msg: "Skill rating must be integer between 1 and 5", code: 400, end: "/api/skills/ratings", errCode: "VAL-004", sev: "WARNING" },
+    { type: "PAST_DUE_DATE_ERROR", cat: "VALIDATION", msg: "Target completion due date cannot be in the past", code: 400, end: "/api/training", errCode: "VAL-005", sev: "WARNING" },
+    { type: "FILE_SIZE_EXCEEDED", cat: "VALIDATION", msg: "File size exceeds maximum limit of 5MB", code: 400, end: "/api/certificates/upload", errCode: "VAL-006", sev: "WARNING" },
+    { type: "MANAGER_CAPACITY_EXCEEDED", cat: "VALIDATION", msg: "Manager direct report capacity threshold exceeded", code: 400, end: "/api/manager/assign", errCode: "VAL-007", sev: "ERROR" },
+    // AUTHENTICATION & AUTHORIZATION
+    { type: "AUTHENTICATION_ERROR", cat: "SECURITY", msg: "Invalid JWT signature or access token expired", code: 401, end: "/api/auth/login", errCode: "AUTH-001", sev: "ERROR" },
+    { type: "INACTIVE_ACCOUNT_ERROR", cat: "SECURITY", msg: "Attempted login on inactive or locked account", code: 403, end: "/api/auth/login", errCode: "AUTH-002", sev: "ERROR" },
+    { type: "AUTHORIZATION_ERROR", cat: "SECURITY", msg: "Access forbidden: ADMIN role required for resource", code: 403, end: "/api/admin/reports", errCode: "AUTH-003", sev: "WARNING" },
+    { type: "WRONG_PORTAL_ACCESS", cat: "SECURITY", msg: "User role mismatch for target portal endpoint", code: 403, end: "/api/manager/team", errCode: "AUTH-004", sev: "WARNING" },
+    // DATABASE ERRORS
+    { type: "POSTGRESQL_ERROR", cat: "DATABASE", msg: "Connection timeout while executing query on PostgreSQL pool", code: 500, end: "/api/org/departments", errCode: "DB-001", sev: "CRITICAL" },
+    { type: "UNIQUE_CONSTRAINT_ERROR", cat: "DATABASE", msg: "Unique constraint violation on employee_code index", code: 409, end: "/api/employees", errCode: "DB-002", sev: "ERROR" },
+    { type: "FOREIGN_KEY_ERROR", cat: "DATABASE", msg: "Foreign key constraint failure on manager_id reference", code: 400, end: "/api/manager/assign", errCode: "DB-003", sev: "ERROR" },
+    { type: "QUERY_TIMEOUT_ERROR", cat: "DATABASE", msg: "Database query execution exceeded 10000ms threshold", code: 504, end: "/api/reports/skills", errCode: "DB-004", sev: "CRITICAL" },
+    // FILE AND EXPORT ERRORS
+    { type: "FILE_UPLOAD_ERROR", cat: "SYSTEM", msg: "Attachment MIME type unsupported: must be PDF, PNG, or JPG", code: 400, end: "/api/ticket/attachment", errCode: "SYS-001", sev: "WARNING" },
+    { type: "RESUME_GENERATION_ERROR", cat: "SYSTEM", msg: "Failed to render PDF template for employee resume", code: 500, end: "/api/resume/download", errCode: "SYS-002", sev: "ERROR" },
+    { type: "REPORT_EXPORT_ERROR", cat: "SYSTEM", msg: "Memory limit reached while rendering PDF document export", code: 500, end: "/api/reports/export", errCode: "SYS-003", sev: "ERROR" },
+    // BUSINESS LOGIC ERRORS
+    { type: "DUPLICATE_ASSIGNMENT_ERROR", cat: "BUSINESS", msg: "Active manager assignment already exists for employee", code: 409, end: "/api/manager/assign", errCode: "BUS-001", sev: "WARNING" },
+    { type: "TRAINING_ALREADY_ASSIGNED", cat: "BUSINESS", msg: "Training plan already assigned to employee", code: 409, end: "/api/training/assign", errCode: "BUS-002", sev: "WARNING" },
+    { type: "CLOSED_TICKET_REPLY_ERROR", cat: "BUSINESS", msg: "Cannot post reply on closed ticket", code: 400, end: "/api/tickets/reply", errCode: "BUS-003", sev: "WARNING" }
   ];
 
-  for (let i = 0; i < 52; i++) {
-    const errObj = errorTypes[i % errorTypes.length];
-    const userId = allPeople[i % allPeople.length].userId || userAdmin.id;
+  const statuses = ["OPEN", "INVESTIGATING", "RESOLVED", "IGNORED"];
+
+  for (let i = 0; i < 88; i++) {
+    const errObj = errorTypesList[i % errorTypesList.length];
+    const userObj = allPeople[i % allPeople.length];
+    const userId = userObj.userId || userAdmin.id;
+    const resStatus = statuses[i % statuses.length];
 
     await prisma.errorLog.create({
       data: {
+        errorCode: `${errObj.errCode}-${100 + i}`,
         userId: userId,
         endpoint: errObj.end,
         method: i % 2 === 0 ? "POST" : "GET",
         errorType: errObj.type,
+        category: errObj.cat,
         errorMessage: errObj.msg,
-        stackTrace: `Error: ${errObj.msg}\n    at Controller.handle (${errObj.end}:42:15)\n    at Layer.handle [as handle_request] (express/lib/router/layer.js:95:5)`,
-        requestBody: JSON.stringify({ query: "test", page: 1 }),
+        technicalMessage: `Internal Stack Context: Exception raised at ${errObj.end} (code ${errObj.code}): ${errObj.msg}`,
+        stackTrace: `Error: ${errObj.msg}\n    at Controller.handle (${errObj.end}:42:15)\n    at Layer.handle [as handle_request] (express/lib/router/layer.js:95:5)\n    at trim_prefix (express/lib/router/index.js:317:13)`,
+        requestBody: JSON.stringify({ query: "test_payload", timestamp: Date.now() }),
         statusCode: errObj.code,
+        severity: errObj.sev,
+        resolutionStatus: resStatus,
+        resolvedBy: resStatus === "RESOLVED" ? userAdmin.email : undefined,
+        resolutionNote: resStatus === "RESOLVED" ? "Investigated stack trace and applied configuration patch." : undefined,
+        resolvedAt: resStatus === "RESOLVED" ? new Date() : undefined,
         ipAddress: `10.0.0.${15 + (i % 30)}`,
         userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
-        createdAt: new Date(Date.now() - (52 - i) * 3600 * 1000 * 6),
+        createdAt: new Date(Date.now() - (88 - i) * 3600 * 1000 * 6),
       },
     });
   }

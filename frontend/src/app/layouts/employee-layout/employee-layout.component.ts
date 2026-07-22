@@ -62,6 +62,10 @@ import { Subscription } from "rxjs";
               Support Tickets
               <span *ngIf="openTicketCount > 0" class="nav-badge">{{ openTicketCount }}</span>
             </a>
+            <a routerLink="/employee/logs" routerLinkActive="active" class="nav-item">
+              <span class="material-icons">receipt_long</span>
+              Activity & Audit Logs
+            </a>
             <a routerLink="/employee/profile" routerLinkActive="active" class="nav-item">
               <span class="material-icons">manage_accounts</span>
               Settings
@@ -201,6 +205,7 @@ export class EmployeeLayoutComponent implements OnInit, OnDestroy {
     "/employee/profile":     "Settings & Profile",
     "/employee/projects":    "My Projects",
     "/employee/resume":      "My Resume",
+    "/employee/logs":        "Activity & Audit Logs",
   };
 
   constructor(

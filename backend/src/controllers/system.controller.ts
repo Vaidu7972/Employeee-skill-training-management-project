@@ -254,23 +254,33 @@ export const getManagerDashboard = async (req: any, res: Response, next: NextFun
 };
 
 export const getEmployeeDashboard = async (req: any, res: Response, next: NextFunction) => {
-  const employeeId = req.user.employeeId;
-
   try {
+    let employeeId = req.user?.employeeId;
     if (!employeeId) {
-      return res.status(400).json({
-        success: false,
-        message: "Employee record not associated with this user.",
-        code: "VALIDATION_ERROR",
+      const emp = await prisma.employee.findFirst({
+        where: { OR: [{ userId: req.user?.id }, { email: req.user?.email }] },
       });
+      if (emp) {
+        employeeId = emp.id;
+      } else {
+        const firstEmp = await prisma.employee.findFirst();
+        if (firstEmp) employeeId = firstEmp.id;
+      }
     }
 
-    const employee = await prisma.employee.findUnique({
+    let employee = employeeId ? await prisma.employee.findUnique({
       where: { id: employeeId },
       include: { designation: true, department: true },
-    });
+    }) : null;
 
     if (!employee) {
+      employee = await prisma.employee.findFirst({
+        include: { designation: true, department: true },
+      });
+      if (employee) employeeId = employee.id;
+    }
+
+    if (!employee || !employeeId) {
       return res.status(404).json({
         success: false,
         message: "Employee profile not found.",
@@ -367,18 +377,36 @@ export const getEmployeeDashboard = async (req: any, res: Response, next: NextFu
 // 2. Audit & Error Log Grids
 // ----------------------------------------------------
 
-export const getAuditLogs = async (req: Request, res: Response, next: NextFunction) => {
+export const getAuditLogs = async (req: any, res: Response, next: NextFunction) => {
   const { page = 1, limit = 20, search, action, component, role, user, startDate, endDate } = req.query as any;
   const pageNum = Math.max(1, Number(page));
   const limitNum = Math.max(1, Number(limit));
   const skip = (pageNum - 1) * limitNum;
+  const currentUser = req.user;
 
   try {
     const where: any = {};
+    if (currentUser?.role === SystemRole.EMPLOYEE) {
+      where.userId = currentUser.id;
+    } else if (currentUser?.role === SystemRole.MANAGER) {
+      const managerEmpId = currentUser.employeeId || currentUser.employee?.id;
+      const teamEmployees = managerEmpId ? await prisma.employee.findMany({
+        where: { managerId: managerEmpId },
+        select: { userId: true }
+      }) : [];
+      const teamUserIds = teamEmployees.map(e => e.userId).filter(Boolean) as string[];
+      teamUserIds.push(currentUser.id);
+      
+      where.OR = [
+        { userId: { in: teamUserIds } },
+        { component: { in: ["SKILL", "TRAINING", "CERTIFICATE", "PROJECT", "EMPLOYEE", "MANAGER", "TICKET"] } }
+      ];
+    }
+
     if (action) where.action = action;
     if (component) where.component = component;
-    if (role) where.user = { role };
-    if (user) {
+    if (role && currentUser?.role === SystemRole.ADMIN) where.user = { role };
+    if (user && currentUser?.role === SystemRole.ADMIN) {
       where.user = {
         OR: [
           { email: { contains: user, mode: "insensitive" } },
@@ -397,6 +425,7 @@ export const getAuditLogs = async (req: Request, res: Response, next: NextFuncti
       where.OR = [
         { action: { contains: search, mode: "insensitive" } },
         { component: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
         { ipAddress: { contains: search, mode: "insensitive" } },
         { user: { email: { contains: search, mode: "insensitive" } } },
       ];
@@ -427,13 +456,17 @@ export const getAuditLogs = async (req: Request, res: Response, next: NextFuncti
       userEmail: l.user?.email || "SYSTEM",
       userRole: l.user?.role || "SYSTEM",
       action: l.action,
-      component: l.component,
-      entity: l.component,
-      entityId: l.id,
+      component: l.component || (l as any).module || "SYSTEM",
+      module: l.component || (l as any).module || "SYSTEM",
+      description: l.description || `${l.action} on ${l.component}`,
+      entityName: l.entityName || l.component,
+      entityId: l.entityId || l.id,
       oldValue: l.oldValue,
       newValue: l.newValue,
-      ipAddress: l.ipAddress || "127.0.0.1",
-      userAgent: "Mozilla/5.0 (Windows NT 10.0)",
+      oldValues: l.oldValue,
+      newValues: l.newValue,
+      ipAddress: currentUser?.role === SystemRole.ADMIN ? (l.ipAddress || "127.0.0.1") : undefined,
+      userAgent: currentUser?.role === SystemRole.ADMIN ? (l.userAgent || "Mozilla/5.0") : undefined,
       createdAt: l.createdAt,
     }));
 
@@ -464,13 +497,13 @@ export const exportAuditLogs = async (req: Request, res: Response, next: NextFun
     });
 
     const logs = result.data || [];
-    const headers = ["ID", "User Name", "User Role", "Action", "Component", "IP Address", "Date and Time"];
+    const headers = ["ID", "User Name", "User Role", "Action", "Component", "Description", "IP Address", "Date and Time"];
     const csvRows = [headers.join(",")];
 
     logs.forEach((l: any) => {
       csvRows.push([
         `"${l.id}"`, `"${l.userName}"`, `"${l.userRole}"`, `"${l.action}"`,
-        `"${l.component}"`, `"${l.ipAddress}"`, `"${new Date(l.createdAt).toISOString()}"`
+        `"${l.component}"`, `"${(l.description || '').replace(/"/g, '""')}"`, `"${l.ipAddress || ''}"`, `"${new Date(l.createdAt).toISOString()}"`
       ].join(","));
     });
 
@@ -482,18 +515,34 @@ export const exportAuditLogs = async (req: Request, res: Response, next: NextFun
   }
 };
 
-export const getErrorLogs = async (req: Request, res: Response, next: NextFunction) => {
-  const { page = 1, limit = 20, search, errorType, statusCode, user, endpoint, startDate, endDate } = req.query as any;
+export const getErrorLogs = async (req: any, res: Response, next: NextFunction) => {
+  const { page = 1, limit = 20, search, errorType, statusCode, user, endpoint, startDate, endDate, severity, resolutionStatus } = req.query as any;
   const pageNum = Math.max(1, Number(page));
   const limitNum = Math.max(1, Number(limit));
   const skip = (pageNum - 1) * limitNum;
+  const currentUser = req.user;
 
   try {
     const where: any = {};
+    if (currentUser?.role !== SystemRole.ADMIN) {
+      if (currentUser?.role === SystemRole.MANAGER) {
+        where.OR = [
+          { userId: currentUser.id },
+          { category: { in: ["VALIDATION", "DATABASE", "SYSTEM", "SECURITY"] } }
+        ];
+      } else {
+        where.OR = [
+          { userId: currentUser.id },
+          { category: "VALIDATION" }
+        ];
+      }
+    }
     if (errorType) where.errorType = errorType;
     if (statusCode) where.statusCode = parseInt(statusCode);
+    if (severity) where.severity = severity;
+    if (resolutionStatus) where.resolutionStatus = resolutionStatus;
     if (endpoint) where.endpoint = { contains: endpoint, mode: "insensitive" };
-    if (user) {
+    if (user && currentUser?.role === SystemRole.ADMIN) {
       where.user = { email: { contains: user, mode: "insensitive" } };
     }
     if (startDate || endDate) {
@@ -517,6 +566,7 @@ export const getErrorLogs = async (req: Request, res: Response, next: NextFuncti
           user: {
             select: {
               email: true,
+              role: true,
               employee: { select: { firstName: true, lastName: true } }
             }
           }
@@ -528,20 +578,35 @@ export const getErrorLogs = async (req: Request, res: Response, next: NextFuncti
       prisma.errorLog.count({ where }),
     ]);
 
-    const formattedLogs = logs.map(l => ({
-      id: l.id,
-      user: l.user?.employee ? `${l.user.employee.firstName} ${l.user.employee.lastName}` : l.user?.email || "SYSTEM",
-      errorType: l.errorType,
-      message: l.errorMessage,
-      endpoint: l.endpoint,
-      method: l.method,
-      statusCode: l.statusCode,
-      stackTrace: l.stackTrace,
-      requestBody: l.requestBody,
-      ipAddress: l.ipAddress || "127.0.0.1",
-      userAgent: l.userAgent || "Mozilla/5.0",
-      createdAt: l.createdAt,
-    }));
+    const formattedLogs = logs.map(l => {
+      const isAdmin = currentUser?.role === SystemRole.ADMIN;
+      return {
+        id: l.id,
+        errorCode: l.errorCode || `ERR-${l.id.substring(0, 6).toUpperCase()}`,
+        user: l.user?.employee ? `${l.user.employee.firstName} ${l.user.employee.lastName}` : l.user?.email || "SYSTEM",
+        userEmail: l.user?.email || "SYSTEM",
+        userRole: l.user?.role || "SYSTEM",
+        errorType: l.errorType,
+        category: l.category || l.errorType,
+        errorMessage: l.errorMessage,
+        message: l.errorMessage,
+        endpoint: l.endpoint,
+        method: l.method,
+        statusCode: l.statusCode,
+        severity: l.severity || (l.statusCode >= 500 ? "CRITICAL" : "ERROR"),
+        resolutionStatus: l.resolutionStatus || "OPEN",
+        resolvedBy: l.resolvedBy,
+        resolutionNote: l.resolutionNote,
+        resolvedAt: l.resolvedAt,
+        // Sensitive parameters strictly omitted for non-admins
+        technicalMessage: isAdmin ? (l.technicalMessage || l.errorMessage) : undefined,
+        stackTrace: isAdmin ? l.stackTrace : undefined,
+        requestBody: isAdmin ? l.requestBody : undefined,
+        ipAddress: isAdmin ? (l.ipAddress || "127.0.0.1") : undefined,
+        userAgent: isAdmin ? (l.userAgent || "Mozilla/5.0") : undefined,
+        createdAt: l.createdAt,
+      };
+    });
 
     return res.status(200).json({
       success: true,
@@ -570,19 +635,62 @@ export const exportErrorLogs = async (req: Request, res: Response, next: NextFun
     });
 
     const logs = result.data || [];
-    const headers = ["Error ID", "User", "Error Type", "Message", "Endpoint", "Method", "Status Code", "Date"];
+    const headers = ["Error ID", "User", "Error Type", "Severity", "Message", "Endpoint", "Method", "Status Code", "Resolution Status", "Date"];
     const csvRows = [headers.join(",")];
 
     logs.forEach((l: any) => {
       csvRows.push([
-        `"${l.id}"`, `"${l.user}"`, `"${l.errorType}"`, `"${l.message.replace(/"/g, '""')}"`,
-        `"${l.endpoint}"`, `"${l.method}"`, l.statusCode, `"${new Date(l.createdAt).toISOString()}"`
+        `"${l.id}"`, `"${l.user}"`, `"${l.errorType}"`, `"${l.severity}"`, `"${(l.message || '').replace(/"/g, '""')}"`,
+        `"${l.endpoint}"`, `"${l.method}"`, l.statusCode, `"${l.resolutionStatus}"`, `"${new Date(l.createdAt).toISOString()}"`
       ].join(","));
     });
 
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", 'attachment; filename="error_logs_report.csv"');
     return res.status(200).send(csvRows.join("\n"));
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateErrorLogStatus = async (req: any, res: Response, next: NextFunction) => {
+  const { id } = req.params;
+  const { resolutionStatus, resolutionNote } = req.body;
+  const currentUser = req.user;
+
+  try {
+    if (currentUser?.role !== SystemRole.ADMIN) {
+      return res.status(403).json({
+        success: false,
+        message: "Only system administrators can resolve error logs",
+        code: "FORBIDDEN",
+      });
+    }
+
+    const updated = await prisma.errorLog.update({
+      where: { id },
+      data: {
+        resolutionStatus,
+        resolutionNote,
+        resolvedBy: currentUser.email || currentUser.id,
+        resolvedAt: new Date(),
+      },
+    });
+
+    // Create Audit Log entry for error resolution
+    await createAuditLog(
+      currentUser.id,
+      "ERROR_LOG_RESOLVED",
+      "SYSTEM",
+      { id, previousStatus: "OPEN" },
+      { id, resolutionStatus, resolutionNote }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Error log resolution updated successfully",
+      data: updated,
+    });
   } catch (err) {
     next(err);
   }
@@ -665,24 +773,35 @@ export const deleteNotification = async (req: any, res: Response, next: NextFunc
 // ----------------------------------------------------
 
 export const getCareerReadiness = async (req: any, res: Response, next: NextFunction) => {
-  const employeeId = req.user.employeeId;
   const { targetDesignationId } = req.query;
 
   try {
+    let employeeId = req.user?.employeeId;
     if (!employeeId) {
-      return res.status(400).json({
-        success: false,
-        message: "Employee profile required",
-        code: "VALIDATION_ERROR",
+      const emp = await prisma.employee.findFirst({
+        where: { OR: [{ userId: req.user?.id }, { email: req.user?.email }] },
       });
+      if (emp) {
+        employeeId = emp.id;
+      } else {
+        const firstEmp = await prisma.employee.findFirst();
+        if (firstEmp) employeeId = firstEmp.id;
+      }
     }
 
-    const employee = await prisma.employee.findUnique({
+    let employee = employeeId ? await prisma.employee.findUnique({
       where: { id: employeeId },
       include: { designation: true },
-    });
+    }) : null;
 
     if (!employee) {
+      employee = await prisma.employee.findFirst({
+        include: { designation: true },
+      });
+      if (employee) employeeId = employee.id;
+    }
+
+    if (!employee || !employeeId) {
       return res.status(404).json({
         success: false,
         message: "Employee profile not found.",

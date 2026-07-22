@@ -830,34 +830,48 @@ model SavedFilter {
 }
 
 model AuditLog {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String?  @db.Uuid
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action    String // e.g. LOGIN, CREATE_EMPLOYEE, SUBMIT_ASSESSMENT
-  component String // e.g. AUTH, EMPLOYEE, SKILL, TRAINING, TICKET
-  oldValue  Json?
-  newValue  Json?
-  ipAddress String?
-  createdAt DateTime @default(now()) @db.Timestamptz
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String?  @db.Uuid
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action        String // e.g. LOGIN, CREATE_EMPLOYEE, SUBMIT_ASSESSMENT
+  component     String // e.g. AUTH, EMPLOYEE, SKILL, TRAINING, TICKET
+  description   String?
+  entityName    String?
+  entityId      String?
+  oldValue      Json?
+  newValue      Json?
+  ipAddress     String?
+  userAgent     String?
+  requestMethod String?
+  endpoint      String?
+  createdAt     DateTime @default(now()) @db.Timestamptz
 
   @@index([component])
   @@map("audit_logs")
 }
 
 model ErrorLog {
-  id           String   @id @default(uuid()) @db.Uuid
-  userId       String?  @db.Uuid
-  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  endpoint     String
-  method       String
-  errorType    String
-  errorMessage String
-  stackTrace   String?
-  requestBody  String?
-  statusCode   Int
-  ipAddress    String?
-  userAgent    String?
-  createdAt    DateTime @default(now()) @db.Timestamptz
+  id               String    @id @default(uuid()) @db.Uuid
+  errorCode        String?
+  userId           String?   @db.Uuid
+  user             User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  endpoint         String
+  method           String
+  errorType        String
+  category         String?
+  errorMessage     String
+  technicalMessage String?
+  stackTrace       String?
+  requestBody      String?
+  statusCode       Int
+  severity         String?   @default("ERROR") // INFO, WARNING, ERROR, CRITICAL
+  resolutionStatus String?   @default("OPEN")  // OPEN, INVESTIGATING, RESOLVED, IGNORED
+  resolvedBy       String?
+  resolutionNote   String?
+  resolvedAt       DateTime? @db.Timestamptz
+  ipAddress        String?
+  userAgent        String?
+  createdAt        DateTime  @default(now()) @db.Timestamptz
 
   @@map("error_logs")
 }

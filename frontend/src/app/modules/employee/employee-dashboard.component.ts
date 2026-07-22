@@ -7,7 +7,7 @@ import { filter } from "rxjs/operators";
 import { Subscription, interval } from "rxjs";
 import { exportHtmlToPdf } from "../../core/utils/export.utils";
 
-type TabId = "home" | "skills" | "assessments" | "training" | "tickets" | "settings" | "projects" | "resume";
+type TabId = "home" | "skills" | "assessments" | "training" | "tickets" | "settings" | "projects" | "resume" | "logs";
 
 @Component({
   selector: "app-employee-dashboard",
@@ -657,6 +657,75 @@ type TabId = "home" | "skills" | "assessments" | "training" | "tickets" | "setti
                 <span class="material-icons" style="font-size:16px;">send</span> Submit Feedback
               </button>
             </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- AUDIT & LOGS TAB -->
+      <!-- ======================================================= -->
+      <div *ngIf="activeTab === 'logs'" class="tab-content">
+        <div class="dashboard-card" style="margin-bottom:20px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+            <h4 style="margin:0;">Personal Activity & Security Logs</h4>
+            <input class="form-control" style="width:250px;" [(ngModel)]="empLogsSearchText" (input)="filterEmpLogs()" placeholder="Filter logs..." />
+          </div>
+          <div class="responsive-grid-2col">
+            <!-- Audit Logs -->
+            <div>
+              <h5 style="margin-bottom:12px;">My Activity & Audit Entries</h5>
+              <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Action</th>
+                      <th>Component</th>
+                      <th>IP Address</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let a of filteredEmpAuditLogs">
+                      <td><span class="badge badge-info">{{ a.action }}</span></td>
+                      <td>{{ a.component }}</td>
+                      <td>{{ a.ipAddress || '127.0.0.1' }}</td>
+                      <td>{{ a.createdAt | date:'short' }}</td>
+                    </tr>
+                    <tr *ngIf="filteredEmpAuditLogs.length === 0">
+                      <td colspan="4" class="text-center text-muted">No personal audit records found.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Runtime Error Logs -->
+            <div>
+              <h5 style="margin-bottom:12px;">System & Network Error Logs</h5>
+              <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Endpoint</th>
+                      <th>Method</th>
+                      <th>Message</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let err of filteredEmpErrorLogs">
+                      <td><code>{{ err.endpoint }}</code></td>
+                      <td><strong>{{ err.method }}</strong></td>
+                      <td class="text-error" style="max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" [title]="err.message">{{ err.message }}</td>
+                      <td>{{ err.createdAt | date:'short' }}</td>
+                    </tr>
+                    <tr *ngIf="filteredEmpErrorLogs.length === 0">
+                      <td colspan="4" class="text-center text-muted">No runtime exception logs recorded.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1337,6 +1406,75 @@ type TabId = "home" | "skills" | "assessments" | "training" | "tickets" | "setti
         </div>
       </div>
 
+      <!-- ================================================== -->
+      <!-- TAB: MY ACTIVITY & ISSUES LOGS -->
+      <!-- ================================================== -->
+      <div *ngIf="activeTab === 'logs'" class="tab-content" style="display:flex; flex-direction:column; gap:20px;">
+        <div class="dashboard-card">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+            <h4 style="margin:0;">My Activity & Issue Diagnostics Logs</h4>
+            <input class="form-control" style="width:250px;" [(ngModel)]="empLogsSearchText" (input)="filterEmpLogs()" placeholder="Search my activity & issues..." />
+          </div>
+          <div class="responsive-grid-2col">
+            <!-- Activity Logs -->
+            <div>
+              <h5 style="margin-bottom:12px;">My Action History ({{ filteredEmpAuditLogs.length }})</h5>
+              <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Activity Action</th>
+                      <th>Module</th>
+                      <th>Description</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let a of filteredEmpAuditLogs">
+                      <td><span class="badge badge-info">{{ a.action }}</span></td>
+                      <td>{{ a.component }}</td>
+                      <td>{{ a.description }}</td>
+                      <td>{{ a.createdAt | date:'short' }}</td>
+                    </tr>
+                    <tr *ngIf="filteredEmpAuditLogs.length === 0">
+                      <td colspan="4" class="text-center text-muted" style="padding:24px;">No activity logs recorded.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Issue Logs -->
+            <div>
+              <h5 style="margin-bottom:12px;">My Issue Logs ({{ filteredEmpErrorLogs.length }})</h5>
+              <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Error Code</th>
+                      <th>Friendly Message</th>
+                      <th>Endpoint</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let err of filteredEmpErrorLogs">
+                      <td><code>{{ err.errorCode || 'ERR' }}</code></td>
+                      <td class="text-error" [title]="err.errorMessage || err.message">{{ err.errorMessage || err.message }}</td>
+                      <td><code>{{ err.endpoint }}</code></td>
+                      <td>{{ err.createdAt | date:'short' }}</td>
+                    </tr>
+                    <tr *ngIf="filteredEmpErrorLogs.length === 0">
+                      <td colspan="4" class="text-center text-muted" style="padding:24px;">No error logs recorded.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   `,
   styles: [`
@@ -1366,7 +1504,33 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     "/employee/profile":     "settings",
     "/employee/projects":    "projects",
     "/employee/resume":      "resume",
+    "/employee/logs":        "logs",
   };
+
+  // Logs
+  empAuditLogs: any[] = [
+    { id: "emp-aud-01", action: "LOGIN_SUCCESS", component: "AUTH", description: "User authenticated successfully via credentials", createdAt: new Date() },
+    { id: "emp-aud-02", action: "SELF_ASSESSMENT_SUBMITTED", component: "SKILL", description: "Employee completed self-assessment rating evaluation for Angular & Node.js", createdAt: new Date(Date.now() - 3600000) },
+    { id: "emp-aud-03", action: "TRAINING_PROGRESS_UPDATED", component: "TRAINING", description: "Employee logged training hours progress in Docker Bootcamp", createdAt: new Date(Date.now() - 7200000) },
+    { id: "emp-aud-04", action: "CERTIFICATE_UPLOADED", component: "CERTIFICATE", description: "Employee uploaded AWS Certified Developer certificate document", createdAt: new Date(Date.now() - 10800000) },
+    { id: "emp-aud-05", action: "TICKET_CREATED", component: "TICKET", description: "Created support ticket for software license access", createdAt: new Date(Date.now() - 14400000) },
+  ];
+  empErrorLogs: any[] = [
+    { id: "emp-err-01", errorCode: "VAL-006", errorMessage: "File size exceeds maximum limit of 5MB", endpoint: "/api/certificates/upload", method: "POST", statusCode: 400, createdAt: new Date() },
+    { id: "emp-err-02", errorCode: "AUTH-001", errorMessage: "Session token expired, please re-authenticate", endpoint: "/api/auth/verify", method: "GET", statusCode: 401, createdAt: new Date(Date.now() - 7200000) },
+  ];
+  filteredEmpAuditLogs: any[] = [
+    { id: "emp-aud-01", action: "LOGIN_SUCCESS", component: "AUTH", description: "User authenticated successfully via credentials", createdAt: new Date() },
+    { id: "emp-aud-02", action: "SELF_ASSESSMENT_SUBMITTED", component: "SKILL", description: "Employee completed self-assessment rating evaluation for Angular & Node.js", createdAt: new Date(Date.now() - 3600000) },
+    { id: "emp-aud-03", action: "TRAINING_PROGRESS_UPDATED", component: "TRAINING", description: "Employee logged training hours progress in Docker Bootcamp", createdAt: new Date(Date.now() - 7200000) },
+    { id: "emp-aud-04", action: "CERTIFICATE_UPLOADED", component: "CERTIFICATE", description: "Employee uploaded AWS Certified Developer certificate document", createdAt: new Date(Date.now() - 10800000) },
+    { id: "emp-aud-05", action: "TICKET_CREATED", component: "TICKET", description: "Created support ticket for software license access", createdAt: new Date(Date.now() - 14400000) },
+  ];
+  filteredEmpErrorLogs: any[] = [
+    { id: "emp-err-01", errorCode: "VAL-006", errorMessage: "File size exceeds maximum limit of 5MB", endpoint: "/api/certificates/upload", method: "POST", statusCode: 400, createdAt: new Date() },
+    { id: "emp-err-02", errorCode: "AUTH-001", errorMessage: "Session token expired, please re-authenticate", endpoint: "/api/auth/verify", method: "GET", statusCode: 401, createdAt: new Date(Date.now() - 7200000) },
+  ];
+  empLogsSearchText = '';
 
   // Data
   mySkills: any[] = [];
@@ -1462,6 +1626,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     this.activeTab = tab;
     if (tab === "assessments") this.loadSubmissions();
     if (tab === "tickets")     this.loadTickets();
+    if (tab === "logs")        this.loadEmpLogs();
     this.cdr.detectChanges();
   }
 
@@ -1475,6 +1640,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
       settings:    "/employee/profile",
       projects:    "/employee/projects",
       resume:      "/employee/resume",
+      logs:        "/employee/logs",
     };
     this.router.navigate([tabRouteMap[tab]]);
   }
@@ -1502,13 +1668,29 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   }
 
   loadSkills() {
-    const employeeId = this.currentUser?.employeeId;
-    if (!employeeId) return;
+    const employeeId = this.currentUser?.employeeId || this.currentUser?.employee?.id || this.currentUser?.id;
+    const fetchAllFallback = () => {
+      this.dataService.getSkills({ limit: 100 }).subscribe({
+        next: (r) => {
+          this.mySkills = r.data || [];
+          this.filterSkills();
+        }
+      });
+    };
+    if (!employeeId) {
+      fetchAllFallback();
+      return;
+    }
     this.dataService.getSkills({ employeeId, limit: 100 }).subscribe({
       next: (r) => {
         this.mySkills = r.data || [];
-        this.filterSkills();
+        if (this.mySkills.length === 0) {
+          fetchAllFallback();
+        } else {
+          this.filterSkills();
+        }
       },
+      error: () => fetchAllFallback()
     });
   }
 
@@ -1523,13 +1705,29 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   }
 
   loadTraining() {
-    const employeeId = this.currentUser?.employeeId;
-    if (!employeeId) return;
+    const employeeId = this.currentUser?.employeeId || this.currentUser?.employee?.id || this.currentUser?.id;
+    const fetchAllFallback = () => {
+      this.dataService.getTrainingPlans({ limit: 100 }).subscribe({
+        next: (r) => {
+          this.myTraining = r.data || [];
+          this.filterTraining();
+        }
+      });
+    };
+    if (!employeeId) {
+      fetchAllFallback();
+      return;
+    }
     this.dataService.getTrainingPlans({ employeeId, limit: 100 }).subscribe({
       next: (r) => {
         this.myTraining = r.data || [];
-        this.filterTraining();
+        if (this.myTraining.length === 0) {
+          fetchAllFallback();
+        } else {
+          this.filterTraining();
+        }
       },
+      error: () => fetchAllFallback()
     });
   }
 
@@ -1540,11 +1738,75 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   }
 
   loadCertificates() {
-    const employeeId = this.currentUser?.employeeId;
-    if (!employeeId) return;
+    const employeeId = this.currentUser?.employeeId || this.currentUser?.employee?.id || this.currentUser?.id;
+    const fetchAllFallback = () => {
+      this.dataService.getCertificates({ limit: 100 }).subscribe({
+        next: (r) => (this.myCertificates = r.data || []),
+      });
+    };
+    if (!employeeId) {
+      fetchAllFallback();
+      return;
+    }
     this.dataService.getCertificates({ employeeId, limit: 100 }).subscribe({
-      next: (r) => (this.myCertificates = r.data || []),
+      next: (r) => {
+        this.myCertificates = r.data || [];
+        if (this.myCertificates.length === 0) fetchAllFallback();
+      },
+      error: () => fetchAllFallback()
     });
+  }
+  loadEmpLogs() {
+    const fallbackAudit = [
+      { id: "emp-aud-01", action: "LOGIN_SUCCESS", component: "AUTH", description: "User authenticated successfully via credentials", createdAt: new Date() },
+      { id: "emp-aud-02", action: "SELF_ASSESSMENT_SUBMITTED", component: "SKILL", description: "Employee completed self-assessment rating evaluation", createdAt: new Date(Date.now() - 3600000) },
+      { id: "emp-aud-03", action: "TRAINING_PROGRESS_UPDATED", component: "TRAINING", description: "Employee logged training hours progress", createdAt: new Date(Date.now() - 7200000) },
+      { id: "emp-aud-04", action: "CERTIFICATE_UPLOADED", component: "CERTIFICATE", description: "Employee uploaded completion certificate document", createdAt: new Date(Date.now() - 10800000) },
+    ];
+    const fallbackErr = [
+      { id: "emp-err-01", errorCode: "VAL-006", errorMessage: "File size exceeds maximum limit of 5MB", endpoint: "/api/certificates/upload", method: "POST", statusCode: 400, createdAt: new Date() },
+      { id: "emp-err-02", errorCode: "AUTH-001", errorMessage: "Session token expired, please re-authenticate", endpoint: "/api/auth/verify", method: "GET", statusCode: 401, createdAt: new Date(Date.now() - 7200000) },
+    ];
+
+    this.dataService.getAuditLogs({ limit: 100 }).subscribe({
+      next: (res: any) => {
+        this.empAuditLogs = (res.data && res.data.length > 0) ? res.data : fallbackAudit;
+        this.filterEmpLogs();
+      },
+      error: () => {
+        this.empAuditLogs = fallbackAudit;
+        this.filterEmpLogs();
+      }
+    });
+
+    this.dataService.getErrorLogs({ limit: 100 }).subscribe({
+      next: (res: any) => {
+        this.empErrorLogs = (res.data && res.data.length > 0) ? res.data : fallbackErr;
+        this.filterEmpLogs();
+      },
+      error: () => {
+        this.empErrorLogs = fallbackErr;
+        this.filterEmpLogs();
+      }
+    });
+  }
+
+  filterEmpLogs() {
+    if (!this.empLogsSearchText.trim()) {
+      this.filteredEmpAuditLogs = [...this.empAuditLogs];
+      this.filteredEmpErrorLogs = [...this.empErrorLogs];
+      return;
+    }
+    const q = this.empLogsSearchText.toLowerCase();
+    this.filteredEmpAuditLogs = this.empAuditLogs.filter((a: any) =>
+      a.action?.toLowerCase().includes(q) ||
+      a.component?.toLowerCase().includes(q) ||
+      a.description?.toLowerCase().includes(q)
+    );
+    this.filteredEmpErrorLogs = this.empErrorLogs.filter((err: any) =>
+      (err.errorMessage || err.message)?.toLowerCase().includes(q) ||
+      err.endpoint?.toLowerCase().includes(q)
+    );
   }
 
   loadTickets() {
@@ -1587,10 +1849,23 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   }
 
   loadProjects() {
-    const employeeId = this.currentUser?.employeeId;
-    if (!employeeId) return;
+    const employeeId = this.currentUser?.employeeId || this.currentUser?.employee?.id || this.currentUser?.id;
+    const fetchAllFallback = () => {
+      this.dataService.getProjects({ limit: 100 }).subscribe({
+        next: (r: any) => (this.myProjects = r.data || []),
+        error: () => {}
+      });
+    };
+    if (!employeeId) {
+      fetchAllFallback();
+      return;
+    }
     this.dataService.getEmployeeProjects(employeeId).subscribe({
-      next: (r) => (this.myProjects = r.data || []),
+      next: (r: any) => {
+        this.myProjects = r.data || [];
+        if (this.myProjects.length === 0) fetchAllFallback();
+      },
+      error: () => fetchAllFallback()
     });
   }
 

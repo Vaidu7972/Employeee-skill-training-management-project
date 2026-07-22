@@ -45,6 +45,10 @@ import { DataService } from "../../core/services/data.service";
               <span class="material-icons">description</span>
               Team Resumes
             </a>
+            <a routerLink="/manager/logs" routerLinkActive="active" class="nav-item">
+              <span class="material-icons">receipt_long</span>
+              Audit & Error Logs
+            </a>
             <a routerLink="/manager/profile" routerLinkActive="active" class="nav-item">
               <span class="material-icons">person</span>
               My Profile
