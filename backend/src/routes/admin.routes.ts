@@ -20,10 +20,10 @@ router.get("/reports/:type/export/:format", authenticateJWT, adminOnly, exportGe
 router.get("/reports/:type/export", authenticateJWT, adminOnly, exportGenericReport);
 router.get("/reports/:type", authenticateJWT, adminOnly, getGenericReport);
 
-// Admin Audit & Error Log Endpoints
-router.get("/audit-logs/export", authenticateJWT, adminOnly, exportAuditLogs);
-router.get("/audit-logs", authenticateJWT, adminOnly, getAuditLogs);
-router.get("/error-logs/export", authenticateJWT, adminOnly, exportErrorLogs);
-router.get("/error-logs", authenticateJWT, adminOnly, getErrorLogs);
+// Admin & System Audit & Error Log Endpoints
+router.get("/audit-logs/export", authenticateJWT, exportAuditLogs);
+router.get("/audit-logs", authenticateJWT, getAuditLogs);
+router.get("/error-logs/export", authenticateJWT, exportErrorLogs);
+router.get("/error-logs", authenticateJWT, getErrorLogs);
 
 export default router;

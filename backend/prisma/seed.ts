@@ -874,6 +874,31 @@ async function main() {
     }
   }
 
+  // 16. Seed Skill Assessments & Questions
+  console.log("Seeding Skill Verification Assessments & Test Questions...");
+  const dbSkills = await prisma.skill.findMany({ take: 6 });
+  for (let i = 0; i < dbSkills.length; i++) {
+    const skill = dbSkills[i];
+    await prisma.skillAssessment.create({
+      data: {
+        title: `${skill.skillName} Verification & Competency Assessment`,
+        description: `Comprehensive technical evaluation test for ${skill.skillName} core concepts, architecture, best practices, and practical problem solving.`,
+        skillId: skill.id,
+        passingScore: 75,
+        status: "ACTIVE",
+        questions: {
+          create: [
+            { questionText: `What is a core fundamental principle of ${skill.skillName}?`, options: "Modular Architecture|Monolithic State|Blocking I/O|Synchronous Threading", correctOption: 0, points: 10 },
+            { questionText: `Which pattern is considered best practice when working with ${skill.skillName}?`, options: "Single Responsibility & Clean Code|Global State Mutability|Inline Code Injections|Uncaught Exceptions", correctOption: 0, points: 10 },
+            { questionText: `How is memory management or performance optimized in ${skill.skillName}?`, options: "Efficient Caching & Lazy Loading|Disabling Garbage Collection|Infinite Polling Loops|Hardcoded Memory Allocations", correctOption: 0, points: 10 },
+            { questionText: `Which tool or command is used for testing in ${skill.skillName}?`, options: "Standard Automated Unit Test Suite|Manual Browser Logs|Console Prints Only|No Verification Needed", correctOption: 0, points: 10 },
+            { questionText: `In ${skill.skillName}, what is the recommended error handling strategy?`, options: "Structured Exceptions & Logging|Silent Swallowing|Terminating Application|Ignoring Errors", correctOption: 0, points: 10 }
+          ]
+        }
+      }
+    });
+  }
+
   console.log("Comprehensive database seeding completed successfully!");
 }
 
