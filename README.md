@@ -85,3 +85,8 @@ npm run test:e2e
 * **Employee**:
   * Email: `employee@skillsphere.local`
   * Password: `Employee@2026`
+
+### Project Author
+Vaidehi Doke
+Vaidehipdoke2206@gmail.com
+7972175917
