@@ -50,7 +50,10 @@ export const getTickets = async (req: any, res: Response, next: NextFunction) =>
     if (role === SystemRole.EMPLOYEE) {
       whereClause.employeeId = employeeId;
     } else if (role === SystemRole.MANAGER) {
-      whereClause.managerId = employeeId;
+      whereClause.OR = [
+        { managerId: employeeId },
+        { employee: { managerId: employeeId } }
+      ];
     } else if (role === SystemRole.ADMIN) {
       if (req.query.employeeId) {
         whereClause.employeeId = req.query.employeeId;

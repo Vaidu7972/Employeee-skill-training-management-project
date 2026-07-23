@@ -49,7 +49,7 @@ import { filter } from "rxjs/operators";
               <div class="kpi-label">Pending Cert Reviews</div>
             </div>
           </div>
-          <div class="kpi-card">
+          <div class="kpi-card" (click)="setSubTab('tickets')" style="cursor:pointer;" title="Click to view helpdesk queue">
             <div class="kpi-icon" style="color: var(--error)"><span class="material-icons">support_agent</span></div>
             <div class="kpi-content">
               <div class="kpi-value">{{ teamTickets.length }}</div>
@@ -76,13 +76,16 @@ import { filter } from "rxjs/operators";
 
         <!-- Quick Manager Actions toolbar -->
         <div class="dashboard-card actions-toolbar">
-          <h4>Team Allocations Toolbar</h4>
-          <div class="actions-grid">
+          <h4>Team & Helpdesk Actions Toolbar</h4>
+          <div class="actions-grid" style="display:flex; gap:12px; flex-wrap:wrap;">
             <button class="btn btn-primary" (click)="openModal('assignSkill')">
               <span class="material-icons">add_moderator</span> Assign Skill Requirement
             </button>
             <button class="btn btn-secondary" (click)="openModal('assignTraining')">
               <span class="material-icons">library_add</span> Assign Team Training
+            </button>
+            <button class="btn btn-outline" (click)="openTicketModal()">
+              <span class="material-icons">support_agent</span> Raise Support Ticket
             </button>
           </div>
         </div>
@@ -1031,7 +1034,12 @@ import { filter } from "rxjs/operators";
         <!-- ================================================== -->
         <div *ngIf="activeSubTab === 'tickets'" style="display:flex; flex-direction:column; gap:20px;">
           <div class="dashboard-card">
-            <h4>Team Support Helpdesk Queue</h4>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+              <h4 style="margin:0;">Team & Manager Support Helpdesk Queue</h4>
+              <button class="btn btn-primary" (click)="openTicketModal()">
+                <span class="material-icons" style="font-size:16px;">add</span> Raise Support Ticket
+              </button>
+            </div>
             <div class="table-responsive">
               <table class="table">
                 <thead>
@@ -1583,6 +1591,50 @@ import { filter } from "rxjs/operators";
               <ng-template #loadingResume>
                 <p>Loading resume preview...</p>
               </ng-template>
+            <!-- Create Ticket Modal for Manager -->
+            <div *ngIf="activeModal === 'createTicket'" class="modal-overlay" (click)="onOverlayClick($event)">
+              <div class="modal-card" style="background:var(--surface-card); border:1px solid var(--border); border-radius:12px; padding:24px; max-width:550px; width:90%; box-shadow:var(--shadow-lg);">
+                <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                  <h4 style="margin:0;">{{ modalTitle }}</h4>
+                  <button class="modal-close" (click)="closeModal()" style="background:none; border:none; font-size:20px; cursor:pointer;">×</button>
+                </div>
+                <form [formGroup]="ticketForm" (ngSubmit)="onTicketSubmit()">
+                  <div class="form-group" style="margin-bottom:12px;">
+                    <label style="display:block; margin-bottom:4px; font-weight:600; font-size:12px;">Subject</label>
+                    <input class="form-control" formControlName="subject" placeholder="Brief summary of issue or team request..." style="width:100%;" />
+                  </div>
+                  <div style="display:flex; gap:12px; margin-bottom:12px;">
+                    <div class="form-group" style="flex:1;">
+                      <label style="display:block; margin-bottom:4px; font-weight:600; font-size:12px;">Category</label>
+                      <select class="form-control" formControlName="category" style="width:100%;">
+                        <option value="SKILL">Skill Assessment</option>
+                        <option value="CERTIFICATE">Certificate Verification</option>
+                        <option value="TRAINING">Training Course</option>
+                        <option value="INFRA">Infrastructure & Access</option>
+                        <option value="GENERAL">General Support</option>
+                      </select>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                      <label style="display:block; margin-bottom:4px; font-weight:600; font-size:12px;">Priority</label>
+                      <select class="form-control" formControlName="priority" style="width:100%;">
+                        <option value="LOW">Low</option>
+                        <option value="MEDIUM">Medium</option>
+                        <option value="HIGH">High</option>
+                        <option value="CRITICAL">Critical (1 Hr SLA)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="form-group" style="margin-bottom:16px;">
+                    <label style="display:block; margin-bottom:4px; font-weight:600; font-size:12px;">Detailed Description</label>
+                    <textarea class="form-control" formControlName="description" rows="4" placeholder="Provide full description for Admin handling..." style="width:100%;"></textarea>
+                  </div>
+                  <div *ngIf="actionError" class="error-banner" style="margin-bottom:12px;">{{ actionError }}</div>
+                  <div class="modal-footer" style="display:flex; gap:10px; justify-content:flex-end;">
+                    <button type="button" class="btn btn-outline" (click)="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" [disabled]="ticketForm.invalid">Submit Support Ticket</button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
         </div>
@@ -1834,7 +1886,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
   sortOrder: "asc" | "desc" = "asc";
 
   // Modal setups
-  activeModal: "assignSkill" | "assignTraining" | "rejectAssess" | "rejectCert" | "resumePreview" | "skillDetail" | null = null;
+  activeModal: any = null;
   modalTitle = "";
   actionError = "";
   rejectionComment = "";
@@ -1852,6 +1904,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
   // Forms
   skillForm!: FormGroup;
   trainingForm!: FormGroup;
+  ticketForm!: FormGroup;
 
   // Charts
   gapChart: any;
@@ -2092,10 +2145,10 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
       }
     });
 
-    // 3. Fetch team tickets
+    // 3. Fetch team & manager tickets
     this.dataService.getTickets({ limit: 500 }).subscribe({
       next: (res) => {
-        const list = res.data.filter((t: any) => teamIds.includes(t.creatorId) || teamIds.includes(t.employeeId));
+        const list = res.data || [];
         this.teamTickets = list.length > 0 ? list : fallbackTeamTickets;
       },
       error: () => {
@@ -2152,6 +2205,37 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
     });
   }
 
+  openTicketModal() {
+    this.ticketForm.reset({
+      subject: '',
+      category: 'GENERAL',
+      priority: 'MEDIUM',
+      description: ''
+    });
+    this.activeModal = 'createTicket';
+    this.modalTitle = 'Raise Support Helpdesk Ticket';
+  }
+
+  onTicketSubmit() {
+    if (this.ticketForm.invalid) return;
+    this.dataService.createTicket(this.ticketForm.value).subscribe({
+      next: (res) => {
+        this.closeModal();
+        this.loadTeamData();
+        alert(`Support ticket ${res.data?.ticketNumber || ''} submitted successfully and assigned to Admin queue!`);
+      },
+      error: (err) => {
+        this.actionError = err?.error?.message || 'Failed to create support ticket.';
+      }
+    });
+  }
+
+  onOverlayClick(e: MouseEvent) {
+    if ((e.target as HTMLElement).classList.contains("modal-overlay")) {
+      this.closeModal();
+    }
+  }
+
   initializeForms() {
     this.skillForm = this.fb.group({
       employeeId: ["", Validators.required],
@@ -2166,6 +2250,13 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
       startDate: ["", Validators.required],
       dueDate: ["", Validators.required],
       estimatedHours: [15, Validators.required],
+    });
+
+    this.ticketForm = this.fb.group({
+      subject: ["", Validators.required],
+      category: ["GENERAL", Validators.required],
+      priority: ["MEDIUM", Validators.required],
+      description: ["", Validators.required],
     });
   }
 
@@ -2787,7 +2878,7 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
   // ----------------------------------------------------
   // Modal Overlays Managers Handling
   // ----------------------------------------------------
-  openModal(type: "assignSkill" | "assignTraining" | "rejectAssess" | "rejectCert" | "resumePreview" | "skillDetail", title: string = '') {
+  openModal(type: any, title: string = '') {
     this.activeModal = type;
     this.actionError = "";
     if (title) this.modalTitle = title;
@@ -3005,6 +3096,15 @@ export class ManagerDashboardComponent implements OnInit, AfterViewInit, OnDestr
   viewTicketDetails(t: any) {
     this.dataService.getTicketById(t.id).subscribe({
       next: (res) => (this.selectedTicket = res.data),
+      error: () => {
+        this.selectedTicket = {
+          ...t,
+          description: t.description || `Ticket ${t.ticketNumber} opened regarding ${t.subject}`,
+          comments: t.comments || [
+            { senderRole: t.createdByRole || "EMPLOYEE", message: `Initial issue: ${t.subject}`, createdAt: t.createdAt || new Date() }
+          ]
+        };
+      }
     });
   }
 

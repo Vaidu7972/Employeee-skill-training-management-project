@@ -1475,6 +1475,52 @@ type TabId = "home" | "skills" | "assessments" | "training" | "tickets" | "setti
         </div>
       </div>
 
+      <!-- Create Ticket Modal -->
+      <div *ngIf="activeModal === 'createTicket'" class="modal-overlay" (click)="onOverlayClick($event)">
+        <div class="modal-card" style="background:var(--surface-card); border:1px solid var(--border); border-radius:12px; padding:24px; max-width:550px; width:90%; box-shadow:var(--shadow-lg);">
+          <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h4 style="margin:0;">{{ modalTitle }}</h4>
+            <button class="modal-close" (click)="closeModal()" style="background:none; border:none; font-size:20px; cursor:pointer;">×</button>
+          </div>
+          <form [formGroup]="ticketForm" (ngSubmit)="onTicketSubmit()">
+            <div class="form-group" style="margin-bottom:12px;">
+              <label style="display:block; margin-bottom:4px; font-weight:600; font-size:12px;">Subject</label>
+              <input class="form-control" formControlName="subject" placeholder="Brief summary of issue..." style="width:100%;" />
+            </div>
+            <div style="display:flex; gap:12px; margin-bottom:12px;">
+              <div class="form-group" style="flex:1;">
+                <label style="display:block; margin-bottom:4px; font-weight:600; font-size:12px;">Category</label>
+                <select class="form-control" formControlName="category" style="width:100%;">
+                  <option value="SKILL">Skill Assessment</option>
+                  <option value="CERTIFICATE">Certificate Verification</option>
+                  <option value="TRAINING">Training Course</option>
+                  <option value="INFRA">Infrastructure & Access</option>
+                  <option value="GENERAL">General Support</option>
+                </select>
+              </div>
+              <div class="form-group" style="flex:1;">
+                <label style="display:block; margin-bottom:4px; font-weight:600; font-size:12px;">Priority</label>
+                <select class="form-control" formControlName="priority" style="width:100%;">
+                  <option value="LOW">Low</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="HIGH">High</option>
+                  <option value="CRITICAL">Critical (1 Hr SLA)</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:16px;">
+              <label style="display:block; margin-bottom:4px; font-weight:600; font-size:12px;">Detailed Description</label>
+              <textarea class="form-control" formControlName="description" rows="4" placeholder="Provide full description of your request or issue..." style="width:100%;"></textarea>
+            </div>
+            <div *ngIf="actionError" class="error-banner" style="margin-bottom:12px;">{{ actionError }}</div>
+            <div class="modal-footer" style="display:flex; gap:10px; justify-content:flex-end;">
+              <button type="button" class="btn btn-outline" (click)="closeModal()">Cancel</button>
+              <button type="submit" class="btn btn-primary" [disabled]="ticketForm.invalid">Submit Support Ticket</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
     </div>
   `,
   styles: [`
@@ -2365,21 +2411,31 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   // TICKET CREATION
   // ----------------------------------------------------------------
   openTicketModal() {
-    this.ticketForm.reset({ category: "OTHER", priority: "MEDIUM" });
-    this.actionError = "";
-    this.openModal("ticket", "Raise Support Ticket");
+    this.ticketForm.reset({
+      subject: '',
+      category: 'GENERAL',
+      priority: 'MEDIUM',
+      description: ''
+    });
+    this.openModal('createTicket', 'Raise Support Helpdesk Ticket');
   }
 
-  onSaveTicket() {
+  onTicketSubmit() {
     if (this.ticketForm.invalid) return;
     this.dataService.createTicket(this.ticketForm.value).subscribe({
-      next: () => {
+      next: (res) => {
         this.closeModal();
         this.loadTickets();
         this.loadStats();
+        alert(`Support ticket ${res.data?.ticketNumber || ''} created successfully!`);
       },
-      error: (err) => (this.actionError = err?.error?.message || "Failed to create ticket."),
+      error: (err) => {
+        this.actionError = err?.error?.message || 'Failed to submit support ticket.';
+      }
     });
+  }
+  onSaveTicket() {
+    this.onTicketSubmit();
   }
 
   // ----------------------------------------------------------------
@@ -2434,6 +2490,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
   // ----------------------------------------------------------------
   // FORMS INIT
   // ----------------------------------------------------------------
+
   initForms() {
     this.selfAssessForm = this.fb.group({
       selfRating:       [1, Validators.required],
@@ -2452,7 +2509,7 @@ export class EmployeeDashboardComponent implements OnInit, OnDestroy {
     });
     this.ticketForm = this.fb.group({
       subject:     ["", Validators.required],
-      category:    ["OTHER", Validators.required],
+      category:    ["GENERAL", Validators.required],
       priority:    ["MEDIUM", Validators.required],
       description: ["", Validators.required],
     });
