@@ -145,6 +145,9 @@ import { AuthService } from "../../core/services/auth.service";
           </div>
         </div>
       </div>
+      <footer style="text-align:center; padding:16px 20px; font-size:12px; color:var(--text-muted); border-top:1px solid var(--border); margin-top:auto;">
+        &copy; 2026 SkillSphere System. Project Author: <strong>Vaidehi Doke</strong> &nbsp;|&nbsp; Email: <a href="mailto:vaidehipdoke2206@gmail.com" style="color:var(--primary); font-weight:600; text-decoration:none;">vaidehipdoke2206&#64;gmail.com</a>
+      </footer>
     </div>
   `,
   styles: [`

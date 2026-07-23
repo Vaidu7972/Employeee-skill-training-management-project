@@ -19,7 +19,11 @@ import { Router } from "@angular/router";
           <a (click)="scrollTo('faqs')">FAQs</a>
           <a (click)="scrollTo('contact')">Contact Us</a>
         </div>
-        <div class="nav-actions">
+        <div class="nav-actions" style="display:flex; align-items:center; gap:16px;">
+          <div style="font-size:13px; color:var(--text-secondary); display:flex; align-items:center; gap:4px;">
+            <span class="material-icons" style="font-size:16px; color:var(--primary);">person</span>
+            <span>Author: <strong>Vaidehi Doke</strong></span>
+          </div>
           <button class="btn btn-primary" (click)="router.navigate(['/auth/select-portal'])">
             Access System
           </button>
@@ -33,6 +37,12 @@ import { Router } from "@angular/router";
           <span class="badge-hero">ENTERPRISE SKILL & TRAINING PLATFORM</span>
           <h1>Empower Your Workforce, Bridge Skill Gaps</h1>
           <p>Align personnel competencies, automate course recommendations, track professional certificates, and resolve IT helpdesk queries on a single corporate system.</p>
+          
+          <div style="margin: 18px 0; padding: 10px 20px; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); border-radius: 50px; display: inline-flex; align-items: center; gap: 10px; border: 1px solid rgba(255,255,255,0.3); font-size: 14px; color: #ffffff;">
+            <span class="material-icons" style="color: #ffd700;">workspace_premium</span>
+            <span>Project Created & Authored by <strong>Vaidehi Doke</strong> | Email: <a href="mailto:vaidehipdoke2206@gmail.com" style="color: #ffffff; font-weight: 700; text-decoration: underline;">vaidehipdoke2206&#64;gmail.com</a></span>
+          </div>
+
           <div class="hero-buttons">
             <button class="btn btn-primary btn-lg" (click)="router.navigate(['/auth/select-portal'])">
               Explore Portal Gateway
@@ -208,14 +218,18 @@ import { Router } from "@angular/router";
         <div class="contact-grid">
           <!-- Info Details -->
           <div class="contact-info">
-            <h4>Company Information</h4>
+            <h4>Company & Author Information</h4>
             <div class="info-item">
               <span class="material-icons">business</span>
               <p><strong>SkillSphere Tech Inc.</strong><br/>100 Enterprise Way, Suite 400<br/>San Francisco, CA 94107</p>
             </div>
             <div class="info-item">
+              <span class="material-icons">badge</span>
+              <p><strong>Project Author:</strong> Vaidehi Doke</p>
+            </div>
+            <div class="info-item">
               <span class="material-icons">email</span>
-              <p>support&#64;skillsphere.local</p>
+              <p><a href="mailto:vaidehipdoke2206@gmail.com" style="color:var(--primary); font-weight:600;">vaidehipdoke2206&#64;gmail.com</a></p>
             </div>
             <div class="info-item">
               <span class="material-icons">phone</span>
@@ -266,9 +280,12 @@ import { Router } from "@angular/router";
 
       <!-- 8. FOOTER -->
       <footer class="footer">
-        <div class="footer-bottom">
-          <p>&copy; 2026 SkillSphere Corp. All rights reserved. Designed for multinational enterprise competency upskilling.</p>
-          <div class="footer-socials">
+        <div class="footer-bottom" style="display:flex; flex-direction:column; gap:6px; align-items:center; text-align:center;">
+          <p style="margin:0;">&copy; 2026 SkillSphere Platform. All rights reserved.</p>
+          <p style="font-size:13px; color:var(--text-secondary); margin:0;">
+            Project Author: <strong>Vaidehi Doke</strong> &nbsp;|&nbsp; Email: <a href="mailto:vaidehipdoke2206@gmail.com" style="color:var(--primary); font-weight:600; text-decoration:none;">vaidehipdoke2206&#64;gmail.com</a>
+          </p>
+          <div class="footer-socials" style="margin-top:4px;">
             <a>LinkedIn</a>
             <a>GitHub</a>
             <a>Twitter</a>
